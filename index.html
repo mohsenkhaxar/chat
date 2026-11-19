@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebRTC STUN Video Chat (Specify ID First)</title>
+  <title>WebRTC STUN Video Chat (ID Signaling via MQTT)</title>
+  <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
   <style>
     :root {
       --bg: #0f172a;
@@ -46,17 +47,17 @@
       display: block;
       margin-bottom: 4px;
     }
-    input, textarea, button {
+    input, button {
       border-radius: 8px;
       border: 1px solid var(--border);
       font-size: 0.95rem;
       padding: 9px 12px;
     }
-    input, textarea {
+    input {
       background: var(--panel-2);
       color: var(--text);
     }
-    input[type="text"] { min-width: 180px; }
+    input[type="text"] { min-width: 170px; }
     button {
       background: #2563eb;
       color: #fff;
@@ -107,46 +108,36 @@
       color: var(--accent);
       margin-top: 10px;
     }
-    textarea {
-      width: 100%;
-      min-height: 92px;
-      font-family: monospace;
-      font-size: 0.78rem;
-      margin-top: 8px;
-    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
-      <h2 style="margin: 0 0 12px;">WebRTC STUN Video Chat</h2>
+      <h2 style="margin: 0 0 12px;">WebRTC STUN Video Chat (ID Signaling)</h2>
       <div class="row">
         <div>
           <label for="my-id-input">1. My ID (specify first)</label>
-          <input id="my-id-input" type="text" placeholder="Type your ID (e.g. ALI)" maxlength="32" autofocus />
+          <input id="my-id-input" type="text" placeholder="e.g. ALI" maxlength="32" autofocus />
         </div>
 
         <div>
           <label for="peer-id-input">2. Peer ID</label>
-          <input id="peer-id-input" type="text" placeholder="Enter remote ID (e.g. MOHSEN)" maxlength="32" />
+          <input id="peer-id-input" type="text" placeholder="e.g. MOHSEN" maxlength="32" />
+        </div>
+
+        <div>
+          <label for="broker-input">Signaling Broker (WSS)</label>
+          <input id="broker-input" type="text" value="wss://broker.emqx.io:8084/mqtt" style="min-width: 240px;" />
         </div>
 
         <div class="row">
+          <button id="connect-btn" class="secondary" type="button">Listen on My ID</button>
           <button id="start-call-btn" class="success" type="button">Start Video Chat</button>
           <button id="hangup-btn" class="danger" type="button">Hang Up</button>
         </div>
       </div>
 
-      <div class="status" id="status-line">Status: Enter My ID first, then Peer ID and Start Video Chat</div>
-
-      <div style="margin-top: 12px;">
-        <label for="signal-box">Signaling Offer / Answer JSON (copy between Mobile &amp; Laptop)</label>
-        <div class="row" style="margin-bottom: 6px;">
-          <button id="copy-signal-btn" class="secondary" type="button">Copy JSON</button>
-          <button id="apply-signal-btn" class="secondary" type="button">Apply Pasted JSON</button>
-        </div>
-        <textarea id="signal-box" placeholder="Offer or Answer JSON is generated here when starting/answering—paste remote JSON here and click 'Apply Pasted JSON'..."></textarea>
-      </div>
+      <div class="status" id="status-line">Status: Type My ID first, then Peer ID and Start Video Chat (STUN-only, no TURN)</div>
     </div>
 
     <div class="card">
@@ -191,13 +182,14 @@
       ]
     };
 
+    const TOPIC_PREFIX = "webrtc-stun-id-v1";
+
     const myIdInput = document.getElementById("my-id-input");
     const peerIdInput = document.getElementById("peer-id-input");
+    const brokerInput = document.getElementById("broker-input");
+    const connectBtn = document.getElementById("connect-btn");
     const startCallBtn = document.getElementById("start-call-btn");
     const hangupBtn = document.getElementById("hangup-btn");
-    const copySignalBtn = document.getElementById("copy-signal-btn");
-    const applySignalBtn = document.getElementById("apply-signal-btn");
-    const signalBox = document.getElementById("signal-box");
     const localVideo = document.getElementById("local-video");
     const remoteVideo = document.getElementById("remote-video");
     const chatMessages = document.getElementById("chat-messages");
@@ -207,10 +199,11 @@
     const clearLogBtn = document.getElementById("clear-log-btn");
     const statusLine = document.getElementById("status-line");
 
+    let mqttClient = null;
+    let boundId = "";
     let localStream = null;
     let pc = null;
     let dataChannel = null;
-    let gatheredCandidates = [];
     let pendingRemoteCandidates = [];
 
     function log(msg) {
@@ -238,20 +231,102 @@
       chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    function getMyId() {
-      const val = myIdInput.value.trim();
-      if (!val) {
-        throw new Error("Please specify your 'My ID' first.");
-      }
-      return val;
+    function requireMyId() {
+      const id = myIdInput.value.trim();
+      if (!id) throw new Error("Please type 'My ID' first.");
+      return id;
     }
 
-    function getPeerId(fallback = "") {
-      const val = peerIdInput.value.trim() || fallback.trim();
-      if (!val) {
-        throw new Error("Please enter the 'Peer ID'.");
+    function requirePeerId(fallback = "") {
+      const id = peerIdInput.value.trim() || fallback.trim();
+      if (!id) throw new Error("Please enter 'Peer ID'.");
+      return id;
+    }
+
+    function topicFor(id) {
+      return `${TOPIC_PREFIX}/${encodeURIComponent(id)}`;
+    }
+
+    async function ensureMqttRegistered() {
+      const myId = requireMyId();
+      const brokerUrl = brokerInput.value.trim();
+      if (!brokerUrl) throw new Error("Signaling broker URL is required.");
+
+      if (mqttClient && mqttClient.connected && boundId === myId) {
+        return mqttClient;
       }
-      return val;
+
+      if (mqttClient) {
+        try { mqttClient.end(true); } catch (_) {}
+        mqttClient = null;
+      }
+
+      boundId = myId;
+      const clientId = `web-${myId}-${Math.random().toString(36).slice(2, 8)}`;
+      log(`Connecting to signaling broker as "${myId}"...`);
+      setStatus(`Registering ID "${myId}"...`);
+
+      return new Promise((resolve, reject) => {
+        const client = mqtt.connect(brokerUrl, {
+          clientId,
+          clean: true,
+          reconnectPeriod: 3000,
+          connectTimeout: 8000
+        });
+
+        const onConnect = () => {
+          cleanupListeners();
+          mqttClient = client;
+          const myTopic = topicFor(myId);
+          client.subscribe(myTopic, { qos: 0 }, (err) => {
+            if (err) {
+              log(`Subscribe error on "${myTopic}": ${err.message}`);
+            } else {
+              log(`Listening for calls on ID "${myId}" (${myTopic}).`);
+              setStatus(`Ready as "${myId}"`);
+            }
+          });
+          resolve(client);
+        };
+
+        const onError = (err) => {
+          cleanupListeners();
+          log(`Signaling broker error: ${err.message || err}`);
+          reject(new Error(`Signaling broker failed: ${err.message || "connection error"}`));
+        };
+
+        function cleanupListeners() {
+          client.off("connect", onConnect);
+          client.off("error", onError);
+        }
+
+        client.on("connect", onConnect);
+        client.on("error", onError);
+        client.on("offline", () => log("Signaling broker offline; will retry."));
+        client.on("reconnect", () => log("Reconnecting to signaling broker..."));
+
+        client.on("message", async (_topic, payload) => {
+          try {
+            const msg = JSON.parse(payload.toString());
+            if (!msg || !msg.from || msg.from === boundId) return;
+            await handleSignalMessage(msg);
+          } catch (err) {
+            log(`Invalid signaling payload: ${err.message}`);
+          }
+        });
+      });
+    }
+
+    function sendSignal(targetId, data) {
+      if (!mqttClient || !mqttClient.connected) {
+        throw new Error("Signaling channel not connected.");
+      }
+      const targetTopic = topicFor(targetId);
+      mqttClient.publish(targetTopic, JSON.stringify({
+        ...data,
+        from: boundId,
+        to: targetId
+      }));
     }
 
     async function ensureLocalMedia() {
@@ -269,38 +344,16 @@
     function bindDataChannel(dc) {
       dataChannel = dc;
       dc.onopen = () => {
-        log("DataChannel opened — text chat active.");
-        setStatus("Connected (Video + Text Chat ready)");
+        log("DataChannel opened — text chat ready.");
+        setStatus(`Connected to "${peerIdInput.value.trim() || "peer"}" (STUN direct P2P)`);
       };
       dc.onclose = () => log("DataChannel closed.");
       dc.onerror = (e) => log(`DataChannel error: ${e.message || "unknown"}`);
       dc.onmessage = (event) => appendChat("Peer", String(event.data));
     }
 
-    function waitForIceGatheringComplete(peerConn, timeoutMs = 4000) {
-      if (peerConn.iceGatheringState === "complete") {
-        return Promise.resolve();
-      }
-      return new Promise((resolve) => {
-        const timer = setTimeout(() => {
-          peerConn.removeEventListener("icegatheringstatechange", onChange);
-          resolve();
-        }, timeoutMs);
-
-        function onChange() {
-          if (peerConn.iceGatheringState === "complete") {
-            clearTimeout(timer);
-            peerConn.removeEventListener("icegatheringstatechange", onChange);
-            resolve();
-          }
-        }
-        peerConn.addEventListener("icegatheringstatechange", onChange);
-      });
-    }
-
-    function createPeerConnection() {
+    function createPeerConnection(remotePeerId) {
       if (pc) pc.close();
-      gatheredCandidates = [];
       pendingRemoteCandidates = [];
       pc = new RTCPeerConnection(RTC_CONFIG);
 
@@ -321,8 +374,11 @@
       };
 
       pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          gatheredCandidates.push(event.candidate.toJSON());
+        if (event.candidate && remotePeerId) {
+          sendSignal(remotePeerId, {
+            type: "candidate",
+            candidate: event.candidate.toJSON()
+          });
         }
       };
 
@@ -343,96 +399,84 @@
         try {
           await pc.addIceCandidate(new RTCIceCandidate(cand));
         } catch (err) {
-          log(`Failed adding remote candidate: ${err.message}`);
+          log(`Failed adding candidate: ${err.message}`);
         }
+      }
+    }
+
+    async function handleSignalMessage(msg) {
+      if (!peerIdInput.value.trim() && msg.from) {
+        peerIdInput.value = msg.from;
+      }
+
+      if (msg.type === "offer") {
+        log(`Incoming call offer from "${msg.from}".`);
+        setStatus(`Incoming call from "${msg.from}"...`);
+        await ensureLocalMedia();
+        const conn = createPeerConnection(msg.from);
+        conn.ondatachannel = (event) => bindDataChannel(event.channel);
+
+        await conn.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        await flushPendingCandidates();
+
+        const answer = await conn.createAnswer();
+        await conn.setLocalDescription(answer);
+        sendSignal(msg.from, {
+          type: "answer",
+          sdp: conn.localDescription.toJSON()
+        });
+        log(`Sent answer to "${msg.from}" via ID signaling.`);
+      } else if (msg.type === "answer") {
+        if (!pc) return;
+        log(`Received answer from "${msg.from}".`);
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        await flushPendingCandidates();
+      } else if (msg.type === "candidate" && msg.candidate) {
+        if (pc && pc.remoteDescription) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          } catch (err) {
+            log(`Candidate error: ${err.message}`);
+          }
+        } else {
+          pendingRemoteCandidates.push(msg.candidate);
+        }
+      } else if (msg.type === "hangup") {
+        log(`Peer "${msg.from}" hung up.`);
+        hangUp(false);
       }
     }
 
     async function startVideoChat() {
       try {
-        const myId = getMyId();
-        const peerId = getPeerId();
-
+        await ensureMqttRegistered();
+        const peerId = requirePeerId();
         await ensureLocalMedia();
-        const conn = createPeerConnection();
+
+        const conn = createPeerConnection(peerId);
         bindDataChannel(conn.createDataChannel("chat"));
 
         const offer = await conn.createOffer();
         await conn.setLocalDescription(offer);
-        await waitForIceGatheringComplete(conn);
 
-        const bundle = {
+        sendSignal(peerId, {
           type: "offer",
-          from: myId,
-          to: peerId,
-          sdp: conn.localDescription.toJSON(),
-          candidates: gatheredCandidates
-        };
-        signalBox.value = JSON.stringify(bundle, null, 2);
-        log(`Offer created as "${myId}" for "${peerId}" with ${gatheredCandidates.length} ICE candidates. Copy JSON to peer.`);
-        setStatus(`Offer ready for "${peerId}" — copy JSON to peer`);
+          sdp: conn.localDescription.toJSON()
+        });
+        log(`Calling "${peerId}" as "${boundId}" (STUN candidate discovery in progress)...`);
+        setStatus(`Calling "${peerId}"...`);
       } catch (err) {
         log(`Error: ${err.message}`);
         setStatus(`Error: ${err.message}`);
       }
     }
 
-    async function applySignalJson() {
-      try {
-        const myId = getMyId();
-        const raw = signalBox.value.trim();
-        if (!raw) throw new Error("Paste an Offer or Answer JSON first.");
-        const msg = JSON.parse(raw);
-
-        if (msg.from && !peerIdInput.value.trim()) {
-          peerIdInput.value = msg.from;
-        }
-
-        if (msg.type === "offer") {
-          log(`Applying offer from "${msg.from || "peer"}" as "${myId}"...`);
-          await ensureLocalMedia();
-          const conn = createPeerConnection();
-          conn.ondatachannel = (event) => bindDataChannel(event.channel);
-
-          await conn.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-          for (const c of (msg.candidates || [])) {
-            await conn.addIceCandidate(new RTCIceCandidate(c));
-          }
-
-          const answer = await conn.createAnswer();
-          await conn.setLocalDescription(answer);
-          await waitForIceGatheringComplete(conn);
-
-          const reply = {
-            type: "answer",
-            from: myId,
-            to: msg.from || getPeerId(),
-            sdp: conn.localDescription.toJSON(),
-            candidates: gatheredCandidates
-          };
-          signalBox.value = JSON.stringify(reply, null, 2);
-          log(`Answer created as "${myId}" with ${gatheredCandidates.length} ICE candidates. Copy JSON back to caller.`);
-          setStatus(`Answer ready — copy JSON back to "${msg.from || "caller"}"`);
-        } else if (msg.type === "answer") {
-          if (!pc) throw new Error("No active offer connection on this side.");
-          log(`Applying answer from "${msg.from || "peer"}"...`);
-          await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-          for (const c of (msg.candidates || [])) {
-            await pc.addIceCandidate(new RTCIceCandidate(c));
-          }
-          await flushPendingCandidates();
-          log("Answer applied; waiting for ICE / peer connection.");
-          setStatus("Answer applied — connecting...");
-        } else {
-          throw new Error(`Unsupported signal type: ${msg.type}`);
-        }
-      } catch (err) {
-        log(`Signal error: ${err.message}`);
-        setStatus(`Error: ${err.message}`);
+    function hangUp(notifyPeer = true) {
+      if (notifyPeer && peerIdInput.value.trim() && mqttClient && mqttClient.connected) {
+        try {
+          sendSignal(peerIdInput.value.trim(), { type: "hangup" });
+        } catch (_) {}
       }
-    }
-
-    function hangUp() {
       if (dataChannel) {
         try { dataChannel.close(); } catch (_) {}
         dataChannel = null;
@@ -447,27 +491,22 @@
       }
       localVideo.srcObject = null;
       remoteVideo.srcObject = null;
-      gatheredCandidates = [];
       pendingRemoteCandidates = [];
-      log("Call ended and media stopped.");
-      setStatus("Call ended");
+      log("Call ended and local media stopped.");
+      setStatus(boundId ? `Ready as "${boundId}"` : "Idle");
     }
 
-    startCallBtn.addEventListener("click", startVideoChat);
-    hangupBtn.addEventListener("click", hangUp);
-    applySignalBtn.addEventListener("click", applySignalJson);
-
-    copySignalBtn.addEventListener("click", async () => {
-      if (!signalBox.value.trim()) return;
+    connectBtn.addEventListener("click", async () => {
       try {
-        await navigator.clipboard.writeText(signalBox.value);
-        log("Copied signaling JSON to clipboard.");
-      } catch (_) {
-        signalBox.select();
-        document.execCommand("copy");
-        log("Selected/copied signaling JSON.");
+        await ensureMqttRegistered();
+      } catch (err) {
+        log(`Error: ${err.message}`);
+        setStatus(`Error: ${err.message}`);
       }
     });
+
+    startCallBtn.addEventListener("click", startVideoChat);
+    hangupBtn.addEventListener("click", () => hangUp(true));
 
     sendChatBtn.addEventListener("click", () => {
       const text = chatInput.value.trim();
@@ -477,7 +516,7 @@
         return;
       }
       dataChannel.send(text);
-      appendChat(`Me (${myIdInput.value.trim() || "Me"})`, text);
+      appendChat(`Me (${boundId || myIdInput.value.trim() || "Me"})`, text);
       chatInput.value = "";
     });
 
