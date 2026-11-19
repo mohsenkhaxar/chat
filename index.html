@@ -292,82 +292,82 @@
     </div>
 
     <!-- Media Control Buttons -->
-    <div class="flex flex-wrap items-center gap-2">
-      <button id="btn-start-media" type="button" class="bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition shadow flex items-center gap-1.5">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-        Start Camera & Mic
-      </button>
-      <button id="btn-toggle-cam" type="button" disabled class="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 text-xs font-medium px-3 py-2 rounded-lg transition">
-        Disable Camera
-      </button>
-      <button id="btn-toggle-mic" type="button" disabled class="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-slate-200 border border-slate-700 text-xs font-medium px-3 py-2 rounded-lg transition">
-        Mute Mic
-      </button>
-      <button id="btn-toggle-screenshare" type="button" class="bg-slate-800 hover:bg-slate-700 disabled:opacity-40 text-indigo-300 border border-slate-700 text-xs font-medium px-3 py-2 rounded-lg transition">
-        Share Screen
-      </button>
-      <button id="btn-stop-media" type="button" disabled class="bg-slate-800 hover:bg-rose-950/70 disabled:opacity-40 text-rose-300 border border-slate-700 hover:border-rose-700/60 text-xs font-medium px-3 py-2 rounded-lg transition">
-        Stop Media
-      </button>
-      <button id="btn-renegotiate-media" type="button" disabled class="ml-auto bg-amber-600/90 hover:bg-amber-500 disabled:opacity-40 text-white text-xs font-semibold px-3 py-2 rounded-lg transition">
-        Create Renegotiation Offer
-      </button>
-    </div>
-
-    <!-- Local & Remote Video Previews -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <!-- Local Video Box -->
-      <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
-        <div class="px-3.5 py-2 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between text-xs font-mono">
-          <span class="text-indigo-300 font-semibold">LOCAL PREVIEW (Muted Self-View)</span>
-          <span id="local-video-meta" class="text-slate-400">No local video stream</span>
-        </div>
-        <div class="relative aspect-video bg-black flex items-center justify-center">
-          <video id="video-local" playsinline autoplay muted class="w-full h-full object-cover"></video>
-          <div id="local-video-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-center p-4 bg-slate-950/90">
-            <svg class="w-10 h-10 text-slate-700 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-            <p id="local-video-status-text" class="text-xs text-slate-400">Camera & microphone not started.</p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Remote Video Box -->
-      <div class="bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
-        <div class="px-3.5 py-2 bg-slate-900/80 border-b border-slate-800 flex items-center justify-between text-xs font-mono">
-          <span class="text-emerald-300 font-semibold">REMOTE PEER STREAM</span>
-          <span id="remote-video-meta" class="text-slate-400">Waiting for remote tracks...</span>
-        </div>
-        <div class="relative aspect-video bg-black flex items-center justify-center">
-          <video id="video-remote" playsinline autoplay class="w-full h-full object-cover"></video>
-          <div id="remote-video-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-center p-4 bg-slate-950/90">
-            <svg class="w-10 h-10 text-slate-700 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-            <p id="remote-video-status-text" class="text-xs text-slate-400">No remote audio/video track received yet.</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Row 2: Manual SDP + ICE Signaling -->
+  <!-- Row 2: Short Peer ID STUN Handshake + Manual SDP + ICE Signaling -->
     <section class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
         <div>
           <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
             <span class="w-5 h-5 rounded bg-slate-800 text-amber-400 flex items-center justify-center text-xs font-mono">3</span>
-            Manual SDP & ICE Signaling Exchange
+            Short Peer ID STUN Handshake &amp; SDP/ICE Signaling
           </h2>
-          <p class="text-xs text-slate-400 mt-0.5">Copy and paste JSON SDP + ICE bundles between tabs, LAN devices, or remote peers.</p>
+          <p class="text-xs text-slate-400 mt-0.5">Handshake using short Peer IDs over STUN (No-TURN) via local tab BroadcastChannel, URL hash, or compact ID-coded bundles—or copy/paste JSON directly.</p>
         </div>
         <div class="flex flex-wrap gap-2">
           <button id="btn-create-offer" type="button" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition shadow">
             Peer A: 1. Create Offer
           </button>
           <button id="btn-create-answer" type="button" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition shadow">
-            Peer B: 2. Accept Offer & Create Answer
+            Peer B: 2. Accept Offer &amp; Create Answer
           </button>
           <button id="btn-accept-answer" type="button" class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition shadow">
             Peer A: 3. Apply Remote Answer
           </button>
+        </div>
+      </div>
+
+      <!-- Short Peer ID Rendezvous Bar -->
+      <div class="bg-slate-950/90 border border-indigo-500/30 rounded-xl p-3.5 space-y-3">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+          <div class="md:col-span-4">
+            <label for="input-local-peer-id" class="block text-[11px] font-semibold text-indigo-300 mb-1">
+              Local Peer ID (Short ID)
+            </label>
+            <div class="flex gap-1.5">
+              <input id="input-local-peer-id" type="text" maxlength="20" placeholder="e.g. peer-a8f2"
+                class="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none" />
+              <button id="btn-gen-peer-id" type="button" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono shrink-0" title="Generate new short ID">
+                New ID
+              </button>
+              <button id="btn-copy-peer-id" type="button" class="bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono shrink-0" title="Copy Local Peer ID">
+                Copy
+              </button>
+            </div>
+          </div>
+
+          <div class="md:col-span-4">
+            <label for="input-remote-peer-id" class="block text-[11px] font-semibold text-emerald-300 mb-1">
+              Remote Peer ID (Target ID)
+            </label>
+            <input id="input-remote-peer-id" type="text" maxlength="20" placeholder="e.g. peer-91c4"
+              class="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none" />
+          </div>
+
+          <div class="md:col-span-4 flex flex-wrap gap-1.5">
+            <button id="btn-id-offer" type="button" class="flex-1 bg-indigo-600/90 hover:bg-indigo-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
+              Offer by ID
+            </button>
+            <button id="btn-id-answer" type="button" class="flex-1 bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
+              Answer by ID
+            </button>
+            <button id="btn-id-apply-answer" type="button" class="flex-1 bg-sky-600/90 hover:bg-sky-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
+              Apply by ID
+            </button>
+          </div>
+        </div>
+
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-900 text-[11px] text-slate-400">
+          <div class="flex flex-wrap items-center gap-2">
+            <span id="id-rendezvous-status" class="font-mono text-emerald-400">Rendezvous: BroadcastChannel + Local ID Map ready</span>
+            <button id="btn-copy-id-code" type="button" class="text-indigo-300 hover:text-indigo-200 underline font-mono">
+              Copy Compact ID-Code
+            </button>
+            <button id="btn-share-hash-link" type="button" class="text-sky-300 hover:text-sky-200 underline font-mono">
+              Copy #Hash Link
+            </button>
+          </div>
+          <span class="text-[11px] text-slate-500">
+            <strong>How IDs work with STUN:</strong> STUN finds IP/NAT candidates; a lightweight rendezvous channel (BroadcastChannel, URL fragment, or public broker/PeerJS) maps short Peer IDs to SDP + ICE.
+          </span>
         </div>
       </div>
 
@@ -561,10 +561,24 @@
       'host-only': []
     };
 
+    /**
+     * Browser-only Rendezvous / Signaling explanation:
+     * STUN servers (No-TURN) only discover reflexive public NAT candidates (srflx) so peers
+     * can attempt direct hole-punching—they do NOT match two peers by short ID or exchange SDP.
+     * In a serverless browser setup, a rendezvous layer (such as BroadcastChannel across same-origin
+     * tabs, a URL #fragment, a compact ID-prefixed code, or an external public signaling broker /
+     * PeerJS-style directory) maps a short Peer ID to that peer's latest SDP + STUN ICE bundle.
+     */
+    const RENDEZVOUS_CHANNEL_NAME = 'webrtc-p2p-id-rendezvous-v1';
+
     const appState = {
       pc: null,
       dc: null,
       role: null, // 'caller' | 'callee'
+      localPeerId: '',
+      remotePeerId: '',
+      idDirectory: {}, // Maps short peerId -> latest { fromId, toId, role, bundle, updatedAt }
+      broadcastChannel: null,
       iceServers: JSON.parse(JSON.stringify(ICE_PRESETS['google-stun'])),
       localCandidates: [],
       remoteCandidates: [],
@@ -1770,13 +1784,199 @@
       const trimmed = (rawText || '').trim();
       if (!trimmed) throw new Error('Remote SDP input is empty.');
 
-      if (trimmed.startsWith('{')) {
-        const obj = JSON.parse(trimmed);
+      // Support optional compact ID-Code format: P2PID1:<base64url-json>
+      let normalized = trimmed;
+      if (trimmed.startsWith('P2PID1:')) {
+        const b64 = trimmed.slice('P2PID1:'.length).replace(/-/g, '+').replace(/_/g, '/');
+        const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
+        const decodedJson = decodeURIComponent(escape(atob(b64 + pad)));
+        const envelope = JSON.parse(decodedJson);
+        if (envelope.fromId && !document.getElementById('input-remote-peer-id').value.trim()) {
+          document.getElementById('input-remote-peer-id').value = envelope.fromId;
+          appState.remotePeerId = envelope.fromId;
+        }
+        normalized = JSON.stringify(envelope.bundle || envelope);
+      }
+
+      if (normalized.startsWith('{')) {
+        const obj = JSON.parse(normalized);
         if (!obj.sdp || !obj.sdp.type || !obj.sdp.sdp) {
           throw new Error('JSON bundle is missing valid "sdp.type" or "sdp.sdp".');
         }
         return obj;
       }
+
+      const type = normalized.includes('a=setup:active') ? 'answer' : 'offer';
+      return { sdp: { type, sdp: normalized }, candidates: [] };
+    }
+
+    function generateShortPeerId() {
+      const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+      let suffix = '';
+      for (let i = 0; i < 4; i += 1) {
+        suffix += chars[Math.floor(Math.random() * chars.length)];
+      }
+      return `p-${suffix}`;
+    }
+
+    function getLocalBundleObject() {
+      const raw = document.getElementById('txt-local-sdp')?.value || '';
+      if (!raw.trim()) return null;
+      return JSON.parse(raw);
+    }
+
+    function buildCompactIdCode() {
+      const bundle = getLocalBundleObject();
+      if (!bundle) return '';
+      const fromId = (document.getElementById('input-local-peer-id')?.value || appState.localPeerId || '').trim();
+      const toId = (document.getElementById('input-remote-peer-id')?.value || appState.remotePeerId || '').trim();
+      const envelope = { v: 1, fromId, toId, bundle };
+      const utf8Bytes = unescape(encodeURIComponent(JSON.stringify(envelope)));
+      const b64url = btoa(utf8Bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      return `P2PID1:${b64url}`;
+    }
+
+    function publishBundleToRendezvous(kind) {
+      const bundle = getLocalBundleObject();
+      if (!bundle) return;
+      const fromId = (document.getElementById('input-local-peer-id')?.value || appState.localPeerId || '').trim();
+      const toId = (document.getElementById('input-remote-peer-id')?.value || appState.remotePeerId || '').trim();
+      appState.localPeerId = fromId;
+      appState.remotePeerId = toId;
+
+      const record = {
+        kind,
+        fromId,
+        toId,
+        bundle,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (fromId) {
+        appState.idDirectory[fromId] = record;
+      }
+
+      if (appState.broadcastChannel) {
+        try {
+          appState.broadcastChannel.postMessage({ type: 'signal-record', record });
+          logEvent(`Published ${kind} under Peer ID "${fromId || 'anon'}"${toId ? ` -> "${toId}"` : ''} via BroadcastChannel.`, 'info');
+        } catch (err) {
+          logEvent(`BroadcastChannel publish error: ${err.message}`, 'warn');
+        }
+      }
+    }
+
+    function lookupRemoteRecordById(targetId) {
+      const cleanId = (targetId || '').trim();
+      if (!cleanId) return null;
+      return appState.idDirectory[cleanId] || null;
+    }
+
+    function initIdRendezvous() {
+      const localInput = document.getElementById('input-local-peer-id');
+      const remoteInput = document.getElementById('input-remote-peer-id');
+      const statusEl = document.getElementById('id-rendezvous-status');
+
+      if (!appState.localPeerId) {
+        appState.localPeerId = generateShortPeerId();
+      }
+      if (localInput && !localInput.value) {
+        localInput.value = appState.localPeerId;
+      }
+
+      if (localInput) {
+        localInput.addEventListener('input', () => {
+          appState.localPeerId = localInput.value.trim();
+        });
+      }
+      if (remoteInput) {
+        remoteInput.addEventListener('input', () => {
+          appState.remotePeerId = remoteInput.value.trim();
+        });
+      }
+
+      if ('BroadcastChannel' in window) {
+        try {
+          const bc = new BroadcastChannel(RENDEZVOUS_CHANNEL_NAME);
+          appState.broadcastChannel = bc;
+          bc.onmessage = (event) => {
+            const msg = event.data;
+            if (!msg || msg.type !== 'signal-record' || !msg.record) return;
+            const rec = msg.record;
+            if (rec.fromId) {
+              appState.idDirectory[rec.fromId] = rec;
+            }
+            const myId = (localInput?.value || appState.localPeerId || '').trim();
+            const isTargetedToMe = !rec.toId || rec.toId === myId;
+            if (rec.fromId && rec.fromId !== myId && isTargetedToMe) {
+              if (remoteInput && !remoteInput.value.trim()) {
+                remoteInput.value = rec.fromId;
+                appState.remotePeerId = rec.fromId;
+              }
+              document.getElementById('txt-remote-sdp').value = JSON.stringify(rec.bundle, null, 2);
+              logEvent(`Received ${rec.kind} from Peer ID "${rec.fromId}" via local BroadcastChannel rendezvous.`, 'success');
+              showToast(`Signal received from ID "${rec.fromId}"!`, 'success');
+            }
+          };
+          if (statusEl) {
+            statusEl.textContent = `Rendezvous: BroadcastChannel ("${RENDEZVOUS_CHANNEL_NAME}") active`;
+          }
+        } catch (_) {
+          if (statusEl) {
+            statusEl.textContent = 'Rendezvous: In-memory ID Map + Compact ID-Code / #Hash ready';
+          }
+        }
+      }
+
+      // Check if opened with a #p2p= compact ID-Code fragment
+      const hash = window.location.hash || '';
+      const p2pPrefix = '#p2p=';
+      if (hash.startsWith(p2pPrefix)) {
+        try {
+          const code = decodeURIComponent(hash.slice(p2pPrefix.length));
+          const parsed = parseRemoteBundle(code);
+          document.getElementById('txt-remote-sdp').value = JSON.stringify(parsed, null, 2);
+          logEvent('Loaded signaling bundle from URL #p2p= hash fragment.', 'success');
+          showToast('Loaded Peer ID bundle from URL hash!', 'success');
+        } catch (err) {
+          logEvent(`Failed to parse URL #p2p= hash: ${err.message}`, 'warn');
+        }
+      }
+    }
+
+    async function handleOfferById() {
+      const localId = (document.getElementById('input-local-peer-id')?.value || '').trim() || generateShortPeerId();
+      document.getElementById('input-local-peer-id').value = localId;
+      appState.localPeerId = localId;
+      appState.remotePeerId = (document.getElementById('input-remote-peer-id')?.value || '').trim();
+      await handleCreateOffer();
+      publishBundleToRendezvous('offer');
+    }
+
+    async function handleAnswerById() {
+      const remoteId = (document.getElementById('input-remote-peer-id')?.value || '').trim();
+      if (remoteId && !document.getElementById('txt-remote-sdp').value.trim()) {
+        const found = lookupRemoteRecordById(remoteId);
+        if (found && found.bundle) {
+          document.getElementById('txt-remote-sdp').value = JSON.stringify(found.bundle, null, 2);
+          logEvent(`Resolved Offer for Peer ID "${remoteId}" from local rendezvous map.`, 'info');
+        }
+      }
+      await handleAcceptOfferAndCreateAnswer();
+      publishBundleToRendezvous('answer');
+    }
+
+    async function handleApplyAnswerById() {
+      const remoteId = (document.getElementById('input-remote-peer-id')?.value || '').trim();
+      if (remoteId && !document.getElementById('txt-remote-sdp').value.trim()) {
+        const found = lookupRemoteRecordById(remoteId);
+        if (found && found.bundle) {
+          document.getElementById('txt-remote-sdp').value = JSON.stringify(found.bundle, null, 2);
+          logEvent(`Resolved Answer for Peer ID "${remoteId}" from local rendezvous map.`, 'info');
+        }
+      }
+      await handleApplyRemoteAnswer();
+    }
 
       const type = trimmed.includes('a=setup:active') ? 'answer' : 'offer';
       return { sdp: { type, sdp: trimmed }, candidates: [] };
@@ -2192,9 +2392,9 @@
       renderIceServers();
       updateKeepaliveUi();
       updateMediaUiBadges();
+      initIdRendezvous();
       initVisibilityAndNetworkListeners();
-      logEvent('WebRTC P2P Diagnostics Studio ready (No-TURN Direct P2P + Video Chat + Auto-Keepalive).', 'info');
-      document.getElementById('ice-preset-select').addEventListener('change', (e) => {
+      logEvent('WebRTC P2P Diagnostics Studio ready (No-TURN Direct P2P + Peer ID Handshake + Video Chat + Auto-Keepalive).', 'info');
         const preset = ICE_PRESETS[e.target.value];
         if (preset) {
           appState.iceServers = JSON.parse(JSON.stringify(preset));
@@ -2233,18 +2433,40 @@
       document.getElementById('btn-accept-answer').addEventListener('click', handleApplyRemoteAnswer);
       document.getElementById('btn-add-trickle-ice').addEventListener('click', handleAddTrickleCandidates);
 
-      document.getElementById('btn-start-media').addEventListener('click', startLocalMedia);
-      document.getElementById('btn-toggle-cam').addEventListener('click', toggleCameraEnabled);
-      document.getElementById('btn-toggle-mic').addEventListener('click', toggleMicEnabled);
-      document.getElementById('btn-toggle-screenshare').addEventListener('click', toggleScreenShare);
-      document.getElementById('btn-stop-media').addEventListener('click', stopAllMedia);
-      document.getElementById('btn-renegotiate-media').addEventListener('click', createRenegotiationOffer);
+      document.getElementById('btn-gen-peer-id').addEventListener('click', () => {
+        const nextId = generateShortPeerId();
+        document.getElementById('input-local-peer-id').value = nextId;
+        appState.localPeerId = nextId;
+        showToast(`Generated Local Peer ID: ${nextId}`, 'info');
+      });
 
-      const btnCopyLocal = document.getElementById('btn-copy-local-sdp');
-      if (btnCopyLocal) {
-        btnCopyLocal.addEventListener('click', () => {
-          copyTextToClipboard(document.getElementById('txt-local-sdp')?.value || '');
-        });
+      document.getElementById('btn-copy-peer-id').addEventListener('click', () => {
+        const idVal = (document.getElementById('input-local-peer-id')?.value || '').trim();
+        copyTextToClipboard(idVal);
+      });
+
+      document.getElementById('btn-id-offer').addEventListener('click', handleOfferById);
+      document.getElementById('btn-id-answer').addEventListener('click', handleAnswerById);
+      document.getElementById('btn-id-apply-answer').addEventListener('click', handleApplyAnswerById);
+
+      document.getElementById('btn-copy-id-code').addEventListener('click', () => {
+        const code = buildCompactIdCode();
+        if (!code) {
+          showToast('Create an Offer or Answer first to generate an ID-Code.', 'warn');
+          return;
+        }
+        copyTextToClipboard(code);
+      });
+
+      document.getElementById('btn-share-hash-link').addEventListener('click', () => {
+        const code = buildCompactIdCode();
+        if (!code) {
+          showToast('Create an Offer or Answer first to build a #hash link.', 'warn');
+          return;
+        }
+        const shareUrl = `${window.location.origin}${window.location.pathname}#p2p=${encodeURIComponent(code)}`;
+        copyTextToClipboard(shareUrl);
+      });
       }
 
       const btnPasteRemote = document.getElementById('btn-paste-remote-sdp');
