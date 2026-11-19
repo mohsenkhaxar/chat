@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebRTC STUN Video Chat (Custom ID)</title>
+  <title>WebRTC STUN Video Chat (Specify ID First)</title>
   <style>
     :root {
       --bg: #0f172a;
@@ -13,8 +13,6 @@
       --text: #f8fafc;
       --muted: #94a3b8;
       --accent: #38bdf8;
-      --accent-2: #22c55e;
-      --danger: #ef4444;
     }
     * { box-sizing: border-box; }
     body {
@@ -40,7 +38,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      align-items: center;
+      align-items: flex-end;
     }
     label {
       font-size: 0.85rem;
@@ -75,12 +73,6 @@
       grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
       gap: 12px;
     }
-    .video-box {
-      background: var(--panel-2);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 8px;
-    }
     video {
       width: 100%;
       aspect-ratio: 16 / 9;
@@ -113,10 +105,15 @@
     .status {
       font-size: 0.85rem;
       color: var(--accent);
+      margin-top: 10px;
+    }
+    textarea {
+      width: 100%;
+      min-height: 92px;
+      font-family: monospace;
+      font-size: 0.78rem;
       margin-top: 8px;
     }
-    details { margin-top: 8px; }
-    textarea { width: 100%; min-height: 84px; font-family: monospace; font-size: 0.78rem; }
   </style>
 </head>
 <body>
@@ -125,47 +122,40 @@
       <h2 style="margin: 0 0 12px;">WebRTC STUN Video Chat</h2>
       <div class="row">
         <div>
-          <label for="my-id-input">My ID (editable)</label>
-          <div class="row">
-            <input id="my-id-input" type="text" placeholder="e.g. SARA-01" maxlength="32" />
-            <button id="set-id-btn" class="secondary" type="button">Set ID</button>
-            <button id="random-id-btn" class="secondary" type="button">Random</button>
-          </div>
+          <label for="my-id-input">1. My ID (specify first)</label>
+          <input id="my-id-input" type="text" placeholder="Type your ID (e.g. ALI)" maxlength="32" autofocus />
         </div>
 
         <div>
-          <label for="peer-id-input">Peer ID</label>
-          <div class="row">
-            <input id="peer-id-input" type="text" placeholder="Enter remote Peer ID" maxlength="32" />
-            <button id="start-call-btn" class="success" type="button">Start Video Chat</button>
-            <button id="hangup-btn" class="danger" type="button">Hang Up</button>
-          </div>
+          <label for="peer-id-input">2. Peer ID</label>
+          <input id="peer-id-input" type="text" placeholder="Enter remote ID (e.g. MOHSEN)" maxlength="32" />
+        </div>
+
+        <div class="row">
+          <button id="start-call-btn" class="success" type="button">Start Video Chat</button>
+          <button id="hangup-btn" class="danger" type="button">Hang Up</button>
         </div>
       </div>
 
-      <div class="status" id="status-line">Status: Idle (STUN-only, no TURN)</div>
+      <div class="status" id="status-line">Status: Enter My ID first, then Peer ID and Start Video Chat</div>
 
-      <details>
-        <summary style="cursor:pointer; color: var(--muted); font-size: 0.85rem;">
-          Manual SDP Signaling Fallback (when peers cannot share BroadcastChannel)
-        </summary>
-        <div style="margin-top: 8px;" class="row">
-          <button id="create-offer-btn" class="secondary" type="button">Generate Offer JSON</button>
-          <button id="apply-signal-btn" class="secondary" type="button">Apply Signal JSON</button>
+      <div style="margin-top: 12px;">
+        <label for="signal-box">Signaling Offer / Answer JSON (copy between Mobile &amp; Laptop)</label>
+        <div class="row" style="margin-bottom: 6px;">
+          <button id="copy-signal-btn" class="secondary" type="button">Copy JSON</button>
+          <button id="apply-signal-btn" class="secondary" type="button">Apply Pasted JSON</button>
         </div>
-        <div style="margin-top: 8px;">
-          <textarea id="signal-box" placeholder="Offer/Answer JSON appears here or paste remote Offer/Answer JSON to apply..."></textarea>
-        </div>
-      </details>
+        <textarea id="signal-box" placeholder="Offer or Answer JSON is generated here when starting/answering—paste remote JSON here and click 'Apply Pasted JSON'..."></textarea>
+      </div>
     </div>
 
     <div class="card">
       <div class="videos">
-        <div class="video-box">
+        <div>
           <label>Local Video (Me)</label>
           <video id="local-video" autoplay playsinline muted></video>
         </div>
-        <div class="video-box">
+        <div>
           <label>Remote Video (Peer)</label>
           <video id="remote-video" autoplay playsinline></video>
         </div>
@@ -201,16 +191,11 @@
       ]
     };
 
-    const STORAGE_KEY = "webrtc_custom_my_id_v1";
-    const CHANNEL_NAME = "webrtc-stun-id-signaling-v1";
-
     const myIdInput = document.getElementById("my-id-input");
-    const setIdBtn = document.getElementById("set-id-btn");
-    const randomIdBtn = document.getElementById("random-id-btn");
     const peerIdInput = document.getElementById("peer-id-input");
     const startCallBtn = document.getElementById("start-call-btn");
     const hangupBtn = document.getElementById("hangup-btn");
-    const createOfferBtn = document.getElementById("create-offer-btn");
+    const copySignalBtn = document.getElementById("copy-signal-btn");
     const applySignalBtn = document.getElementById("apply-signal-btn");
     const signalBox = document.getElementById("signal-box");
     const localVideo = document.getElementById("local-video");
@@ -222,12 +207,11 @@
     const clearLogBtn = document.getElementById("clear-log-btn");
     const statusLine = document.getElementById("status-line");
 
-    let myId = "";
     let localStream = null;
     let pc = null;
     let dataChannel = null;
-    let signalChannel = null;
-    let pendingCandidates = [];
+    let gatheredCandidates = [];
+    let pendingRemoteCandidates = [];
 
     function log(msg) {
       const now = new Date();
@@ -254,92 +238,70 @@
       chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    function sanitizeId(raw) {
-      return (raw || "")
-        .trim()
-        .toUpperCase()
-        .replace(/[^A-Z0-9_-]/g, "-")
-        .replace(/-+/g, "-")
-        .replace(/^-|-$/g, "")
-        .slice(0, 32);
+    function getMyId() {
+      const val = myIdInput.value.trim();
+      if (!val) {
+        throw new Error("Please specify your 'My ID' first.");
+      }
+      return val;
     }
 
-    function generateRandomId() {
-      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-      let out = "PEER-";
-      for (let i = 0; i < 6; i++) {
-        out += chars[Math.floor(Math.random() * chars.length)];
+    function getPeerId(fallback = "") {
+      const val = peerIdInput.value.trim() || fallback.trim();
+      if (!val) {
+        throw new Error("Please enter the 'Peer ID'.");
       }
-      return out;
-    }
-
-    function setupSignalingChannel() {
-      if (signalChannel) {
-        signalChannel.close();
-      }
-      signalChannel = new BroadcastChannel(CHANNEL_NAME);
-      signalChannel.onmessage = async (event) => {
-        const payload = event.data;
-        if (!payload || payload.to !== myId) return;
-        await handleIncomingSignal(payload);
-      };
-      signalChannel.postMessage({ type: "register", from: myId, at: Date.now() });
-      log(`Registered My ID "${myId}" on BroadcastChannel.`);
-    }
-
-    function applyMyId(rawValue, sourceLabel = "manual") {
-      const cleaned = sanitizeId(rawValue);
-      if (!cleaned) {
-        log("Rejected empty/invalid ID. Use letters, numbers, '-' or '_'.");
-        myIdInput.value = myId;
-        return false;
-      }
-      const previous = myId;
-      myId = cleaned;
-      myIdInput.value = myId;
-      try {
-        localStorage.setItem(STORAGE_KEY, myId);
-      } catch (_) {}
-      setupSignalingChannel();
-      if (previous && previous !== myId) {
-        log(`My ID changed (${sourceLabel}): "${previous}" -> "${myId}".`);
-      } else {
-        log(`My ID set (${sourceLabel}): "${myId}".`);
-      }
-      setStatus(`Ready as "${myId}"`);
-      return true;
+      return val;
     }
 
     async function ensureLocalMedia() {
       if (localStream) return localStream;
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("getUserMedia unavailable (requires HTTPS or localhost).");
+        throw new Error("Camera/mic requires HTTPS or localhost.");
       }
       log("Requesting camera and microphone...");
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localVideo.srcObject = localStream;
-      log(`Local media ready (video tracks: ${localStream.getVideoTracks().length}, audio tracks: ${localStream.getAudioTracks().length}).`);
+      log(`Local media ready (video=${localStream.getVideoTracks().length}, audio=${localStream.getAudioTracks().length}).`);
       return localStream;
     }
 
     function bindDataChannel(dc) {
       dataChannel = dc;
       dc.onopen = () => {
-        log("DataChannel open — text chat ready.");
-        setStatus(`Connected as "${myId}"`);
+        log("DataChannel opened — text chat active.");
+        setStatus("Connected (Video + Text Chat ready)");
       };
       dc.onclose = () => log("DataChannel closed.");
       dc.onerror = (e) => log(`DataChannel error: ${e.message || "unknown"}`);
-      dc.onmessage = (event) => {
-        appendChat("Peer", String(event.data));
-      };
+      dc.onmessage = (event) => appendChat("Peer", String(event.data));
     }
 
-    function createPeerConnection(targetPeerId) {
-      if (pc) {
-        pc.close();
+    function waitForIceGatheringComplete(peerConn, timeoutMs = 4000) {
+      if (peerConn.iceGatheringState === "complete") {
+        return Promise.resolve();
       }
-      pendingCandidates = [];
+      return new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          peerConn.removeEventListener("icegatheringstatechange", onChange);
+          resolve();
+        }, timeoutMs);
+
+        function onChange() {
+          if (peerConn.iceGatheringState === "complete") {
+            clearTimeout(timer);
+            peerConn.removeEventListener("icegatheringstatechange", onChange);
+            resolve();
+          }
+        }
+        peerConn.addEventListener("icegatheringstatechange", onChange);
+      });
+    }
+
+    function createPeerConnection() {
+      if (pc) pc.close();
+      gatheredCandidates = [];
+      pendingRemoteCandidates = [];
       pc = new RTCPeerConnection(RTC_CONFIG);
 
       if (localStream) {
@@ -349,7 +311,7 @@
       }
 
       pc.ontrack = (event) => {
-        log(`Remote track received (${event.track.kind}).`);
+        log(`Remote ${event.track.kind} track received.`);
         if (event.streams && event.streams[0]) {
           remoteVideo.srcObject = event.streams[0];
         } else {
@@ -359,24 +321,13 @@
       };
 
       pc.onicecandidate = (event) => {
-        if (event.candidate && targetPeerId && signalChannel) {
-          signalChannel.postMessage({
-            type: "ice",
-            from: myId,
-            to: targetPeerId,
-            candidate: event.candidate.toJSON()
-          });
+        if (event.candidate) {
+          gatheredCandidates.push(event.candidate.toJSON());
         }
       };
 
-      pc.onicegatheringstatechange = () => {
-        log(`ICE gathering state: ${pc.iceGatheringState}`);
-      };
-
-      pc.oniceconnectionstatechange = () => {
-        log(`ICE connection state: ${pc.iceConnectionState}`);
-      };
-
+      pc.onicegatheringstatechange = () => log(`ICE gathering state: ${pc.iceGatheringState}`);
+      pc.oniceconnectionstatechange = () => log(`ICE connection state: ${pc.iceConnectionState}`);
       pc.onconnectionstatechange = () => {
         log(`Peer connection state: ${pc.connectionState}`);
         setStatus(`Connection: ${pc.connectionState}`);
@@ -387,93 +338,96 @@
 
     async function flushPendingCandidates() {
       if (!pc || !pc.remoteDescription) return;
-      while (pendingCandidates.length > 0) {
-        const c = pendingCandidates.shift();
+      while (pendingRemoteCandidates.length > 0) {
+        const cand = pendingRemoteCandidates.shift();
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(c));
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
         } catch (err) {
-          log(`Failed adding buffered ICE candidate: ${err.message}`);
-        }
-      }
-    }
-
-    async function handleIncomingSignal(payload) {
-      const remoteId = sanitizeId(payload.from);
-      if (remoteId && !peerIdInput.value.trim()) {
-        peerIdInput.value = remoteId;
-      }
-
-      if (payload.type === "offer") {
-        log(`Incoming offer from "${remoteId}".`);
-        await ensureLocalMedia();
-        const conn = createPeerConnection(remoteId);
-        conn.ondatachannel = (event) => bindDataChannel(event.channel);
-
-        await conn.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-        await flushPendingCandidates();
-
-        const answer = await conn.createAnswer();
-        await conn.setLocalDescription(answer);
-
-        signalChannel.postMessage({
-          type: "answer",
-          from: myId,
-          to: remoteId,
-          sdp: conn.localDescription.toJSON()
-        });
-        log(`Sent answer to "${remoteId}".`);
-      } else if (payload.type === "answer") {
-        if (!pc) return;
-        log(`Received answer from "${remoteId}".`);
-        await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-        await flushPendingCandidates();
-      } else if (payload.type === "ice" && payload.candidate) {
-        if (pc && pc.remoteDescription) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(payload.candidate));
-          } catch (err) {
-            log(`ICE error: ${err.message}`);
-          }
-        } else {
-          pendingCandidates.push(payload.candidate);
+          log(`Failed adding remote candidate: ${err.message}`);
         }
       }
     }
 
     async function startVideoChat() {
-      const targetPeer = sanitizeId(peerIdInput.value);
-      if (!targetPeer) {
-        log("Please enter a valid Peer ID first.");
-        return;
-      }
-      peerIdInput.value = targetPeer;
-
       try {
+        const myId = getMyId();
+        const peerId = getPeerId();
+
         await ensureLocalMedia();
-        const conn = createPeerConnection(targetPeer);
-        const dc = conn.createDataChannel("chat");
-        bindDataChannel(dc);
+        const conn = createPeerConnection();
+        bindDataChannel(conn.createDataChannel("chat"));
 
         const offer = await conn.createOffer();
         await conn.setLocalDescription(offer);
+        await waitForIceGatheringComplete(conn);
 
-        signalChannel.postMessage({
+        const bundle = {
           type: "offer",
           from: myId,
-          to: targetPeer,
-          sdp: conn.localDescription.toJSON()
-        });
-        signalBox.value = JSON.stringify({
-          type: "offer",
-          from: myId,
-          to: targetPeer,
-          sdp: conn.localDescription.toJSON()
-        }, null, 2);
-
-        log(`Started video chat offer from "${myId}" to "${targetPeer}".`);
-        setStatus(`Calling "${targetPeer}"...`);
+          to: peerId,
+          sdp: conn.localDescription.toJSON(),
+          candidates: gatheredCandidates
+        };
+        signalBox.value = JSON.stringify(bundle, null, 2);
+        log(`Offer created as "${myId}" for "${peerId}" with ${gatheredCandidates.length} ICE candidates. Copy JSON to peer.`);
+        setStatus(`Offer ready for "${peerId}" — copy JSON to peer`);
       } catch (err) {
-        log(`Start video chat failed: ${err.message}`);
+        log(`Error: ${err.message}`);
+        setStatus(`Error: ${err.message}`);
+      }
+    }
+
+    async function applySignalJson() {
+      try {
+        const myId = getMyId();
+        const raw = signalBox.value.trim();
+        if (!raw) throw new Error("Paste an Offer or Answer JSON first.");
+        const msg = JSON.parse(raw);
+
+        if (msg.from && !peerIdInput.value.trim()) {
+          peerIdInput.value = msg.from;
+        }
+
+        if (msg.type === "offer") {
+          log(`Applying offer from "${msg.from || "peer"}" as "${myId}"...`);
+          await ensureLocalMedia();
+          const conn = createPeerConnection();
+          conn.ondatachannel = (event) => bindDataChannel(event.channel);
+
+          await conn.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+          for (const c of (msg.candidates || [])) {
+            await conn.addIceCandidate(new RTCIceCandidate(c));
+          }
+
+          const answer = await conn.createAnswer();
+          await conn.setLocalDescription(answer);
+          await waitForIceGatheringComplete(conn);
+
+          const reply = {
+            type: "answer",
+            from: myId,
+            to: msg.from || getPeerId(),
+            sdp: conn.localDescription.toJSON(),
+            candidates: gatheredCandidates
+          };
+          signalBox.value = JSON.stringify(reply, null, 2);
+          log(`Answer created as "${myId}" with ${gatheredCandidates.length} ICE candidates. Copy JSON back to caller.`);
+          setStatus(`Answer ready — copy JSON back to "${msg.from || "caller"}"`);
+        } else if (msg.type === "answer") {
+          if (!pc) throw new Error("No active offer connection on this side.");
+          log(`Applying answer from "${msg.from || "peer"}"...`);
+          await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+          for (const c of (msg.candidates || [])) {
+            await pc.addIceCandidate(new RTCIceCandidate(c));
+          }
+          await flushPendingCandidates();
+          log("Answer applied; waiting for ICE / peer connection.");
+          setStatus("Answer applied — connecting...");
+        } else {
+          throw new Error(`Unsupported signal type: ${msg.type}`);
+        }
+      } catch (err) {
+        log(`Signal error: ${err.message}`);
         setStatus(`Error: ${err.message}`);
       }
     }
@@ -488,53 +442,30 @@
         pc = null;
       }
       if (localStream) {
-        for (const track of localStream.getTracks()) {
-          track.stop();
-        }
+        for (const track of localStream.getTracks()) track.stop();
         localStream = null;
       }
       localVideo.srcObject = null;
       remoteVideo.srcObject = null;
-      pendingCandidates = [];
-      log("Call ended and local media stopped.");
-      setStatus(`Ready as "${myId}"`);
+      gatheredCandidates = [];
+      pendingRemoteCandidates = [];
+      log("Call ended and media stopped.");
+      setStatus("Call ended");
     }
-
-    setIdBtn.addEventListener("click", () => applyMyId(myIdInput.value, "button"));
-    myIdInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        applyMyId(myIdInput.value, "enter");
-      }
-    });
-    randomIdBtn.addEventListener("click", () => applyMyId(generateRandomId(), "random"));
 
     startCallBtn.addEventListener("click", startVideoChat);
     hangupBtn.addEventListener("click", hangUp);
+    applySignalBtn.addEventListener("click", applySignalJson);
 
-    createOfferBtn.addEventListener("click", async () => {
-      const targetPeer = sanitizeId(peerIdInput.value) || "PEER";
-      await ensureLocalMedia();
-      const conn = createPeerConnection(targetPeer);
-      bindDataChannel(conn.createDataChannel("chat"));
-      const offer = await conn.createOffer();
-      await conn.setLocalDescription(offer);
-      signalBox.value = JSON.stringify({
-        type: "offer",
-        from: myId,
-        to: targetPeer,
-        sdp: conn.localDescription.toJSON()
-      }, null, 2);
-      log("Generated manual Offer JSON in signaling box.");
-    });
-
-    applySignalBtn.addEventListener("click", async () => {
+    copySignalBtn.addEventListener("click", async () => {
+      if (!signalBox.value.trim()) return;
       try {
-        const parsed = JSON.parse(signalBox.value);
-        await handleIncomingSignal(parsed);
-        log("Applied manual Signal JSON.");
-      } catch (err) {
-        log(`Invalid Signal JSON: ${err.message}`);
+        await navigator.clipboard.writeText(signalBox.value);
+        log("Copied signaling JSON to clipboard.");
+      } catch (_) {
+        signalBox.select();
+        document.execCommand("copy");
+        log("Selected/copied signaling JSON.");
       }
     });
 
@@ -542,11 +473,11 @@
       const text = chatInput.value.trim();
       if (!text) return;
       if (!dataChannel || dataChannel.readyState !== "open") {
-        log("Cannot send chat: DataChannel is not open yet.");
+        log("DataChannel is not open yet.");
         return;
       }
       dataChannel.send(text);
-      appendChat(`Me (${myId})`, text);
+      appendChat(`Me (${myIdInput.value.trim() || "Me"})`, text);
       chatInput.value = "";
     });
 
@@ -560,12 +491,6 @@
     clearLogBtn.addEventListener("click", () => {
       logBox.textContent = "";
     });
-
-    let savedId = "";
-    try {
-      savedId = localStorage.getItem(STORAGE_KEY) || "";
-    } catch (_) {}
-    applyMyId(savedId || generateRandomId(), "init");
   </script>
 </body>
 </html>
