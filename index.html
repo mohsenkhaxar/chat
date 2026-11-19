@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebRTC P2P Connection & ICE Diagnostics Studio</title>
+  <title>WebRTC STUN Video Chat</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <script>
@@ -14,660 +14,500 @@
           fontFamily: {
             sans: ['Inter', 'sans-serif'],
             mono: ['JetBrains Mono', 'monospace'],
-          },
-          colors: {
-            slate: {
-              925: '#0b1120',
-              950: '#060913',
-            }
           }
         }
       }
     };
   </script>
   <style>
-    /* Custom scrollbars for logs, lists, and tables */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #0f172a; }
-    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-    ::-webkit-scrollbar-thumb:hover { background: #475569; }
-    .pulse-dot { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+    ::-webkit-scrollbar-track { background: #090d16; }
+    ::-webkit-scrollbar-thumb { background: #273249; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #3b4b6b; }
   </style>
 </head>
-<body class="bg-slate-950 text-slate-200 font-sans antialiased min-h-screen flex flex-col selection:bg-indigo-500 selection:text-white">
+<body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen flex flex-col">
 
-  <!-- Non-blocking Toast Banner Container (never uses alert() or confirm()) -->
-  <div id="toast-container" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-sm"></div>
+  <!-- Non-blocking Toast Notification Stack -->
+  <div id="toast-stack" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
 
-  <!-- Top Header & Real-Time Connection State Telemetry -->
-  <header class="bg-slate-900/90 backdrop-blur border-b border-slate-800 sticky top-0 z-30">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+  <!-- Top Header & Connection State Bar -->
+  <header class="bg-slate-900/95 border-b border-slate-800 sticky top-0 z-20 backdrop-blur">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-lg bg-indigo-600/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400 shrink-0">
+        <div class="w-9 h-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
         </div>
         <div>
           <div class="flex flex-wrap items-center gap-2">
-            <h1 class="text-base sm:text-lg font-bold text-white tracking-tight">WebRTC P2P Path & ICE Diagnostics</h1>
-            <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">NO-TURN / DIRECT P2P</span>
+            <h1 class="text-base sm:text-lg font-bold text-white tracking-tight">WebRTC STUN Video Chat</h1>
+            <span class="px-2 py-0.5 text-[10px] font-mono font-semibold rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/25">
+              STUN ONLY • NO TURN
+            </span>
           </div>
-          <p class="text-xs text-slate-400">STUN NAT hole-punching, Host LAN direct, DataChannel keepalives & mobile app-switch telemetry</p>
+          <p class="text-xs text-slate-400">Peer-to-peer video, audio &amp; DataChannel chat with short Peer IDs</p>
         </div>
       </div>
 
-      <!-- Live RTCPeerConnection State Badges & Export -->
+      <!-- Live WebRTC State Telemetry -->
       <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
-        <div class="bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
+        <div class="bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1">
+          <span class="text-slate-500">Peer:</span>
+          <span id="state-conn" class="text-slate-300 font-semibold">new</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1">
+          <span class="text-slate-500">ICE:</span>
+          <span id="state-ice" class="text-slate-300 font-semibold">new</span>
+        </div>
+        <div class="bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1">
           <span class="text-slate-500">Signaling:</span>
-          <span id="badge-signaling" class="text-slate-300 font-semibold">idle</span>
+          <span id="state-sig" class="text-slate-300 font-semibold">stable</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
-          <span class="text-slate-500">ICE Gather:</span>
-          <span id="badge-gathering" class="text-slate-300 font-semibold">new</span>
+        <div class="bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1">
+          <span class="text-slate-500">Chat DC:</span>
+          <span id="state-dc" class="text-slate-400 font-semibold">closed</span>
         </div>
-        <div class="bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
-          <span class="text-slate-500">ICE Conn:</span>
-          <span id="badge-ice" class="text-slate-300 font-semibold">new</span>
-        </div>
-        <div class="bg-slate-950 border border-slate-800 rounded-md px-2.5 py-1.5 flex items-center gap-1.5">
-          <span class="text-slate-500">PeerConn:</span>
-          <span id="badge-conn" class="text-slate-300 font-semibold">new</span>
-        </div>
-        <button id="btn-export-report" type="button" class="ml-auto sm:ml-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded-md font-sans text-xs font-medium transition flex items-center gap-1.5">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-          Export JSON
-        </button>
       </div>
     </div>
   </header>
 
-  <!-- Main Workspace -->
-  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 py-5 space-y-5">
 
-    <!-- Quick Workflow & Session Actions Banner -->
-    <div class="bg-slate-900/60 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-      <div class="space-y-1">
-        <h2 class="text-sm font-semibold text-white flex items-center gap-2">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 pulse-dot"></span>
-          Direct Peer-to-Peer Testing Without TURN
-        </h2>
-        <p class="text-xs text-slate-400 leading-relaxed">
-          Open on two tabs or devices. <strong>Peer A</strong> clicks <span class="text-indigo-400 font-mono">1. Create Offer</span>, copies the bundle, and sends it to <strong>Peer B</strong>. <strong>Peer B</strong> pastes it, clicks <span class="text-emerald-400 font-mono">2. Accept Offer & Create Answer</span>, and returns the Answer. Once connected, automatic DataChannel heartbeats help keep NAT mappings warm while you test foreground/background behavior.
-        </p>
-      </div>
-      <div class="flex flex-wrap gap-2 shrink-0 w-full md:w-auto">
-        <button id="btn-run-matrix" type="button" class="flex-1 md:flex-initial justify-center bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-lg shadow-indigo-950/50 transition flex items-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-          Run Path Matrix & Loopback
-        </button>
-        <button id="btn-reset-all" type="button" class="flex-1 md:flex-initial justify-center bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg shadow-lg shadow-rose-950/40 transition flex items-center gap-1.5">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          Reset / New Session
-        </button>
-      </div>
-    </div>
-
-    <!-- Automated Multi-Mode Path Matrix & Loopback Drawer -->
-    <section id="matrix-panel" class="hidden bg-slate-900 border border-indigo-500/40 rounded-xl p-5 shadow-xl space-y-4">
-      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div>
-          <h3 class="text-sm font-bold text-white flex items-center gap-2">
-            <span class="px-2 py-0.5 text-[10px] font-mono bg-indigo-500/20 text-indigo-300 rounded">AUTO-DIAGNOSTIC</span>
-            No-TURN ICE Path Matrix & Local Loopback Test
-          </h3>
-          <p class="text-xs text-slate-400 mt-0.5">Tests Host-Only LAN gathering, Google STUN NAT discovery, Multi-STUN gathering, and a full local loopback DataChannel handshake without TURN.</p>
-        </div>
-        <button id="btn-close-matrix" type="button" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800" aria-label="Close Matrix">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div id="matrix-results-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3"></div>
-    </section>
-
-    <!-- Row 1: STUN / No-TURN Configuration + Active Path Telemetry -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-
-      <!-- Left (5 cols): STUN Servers & Policy -->
-      <section class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
-        <div class="space-y-4">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <span class="w-5 h-5 rounded bg-slate-800 text-indigo-400 flex items-center justify-center text-xs font-mono">1</span>
-              STUN Servers & Direct P2P Policy
-            </h2>
-            <select id="ice-preset-select" class="bg-slate-950 border border-slate-700 text-xs text-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-500">
-              <option value="google-stun" selected>Google STUN (No TURN)</option>
-              <option value="multi-stun">Multi-STUN (Google + Cloudflare)</option>
-              <option value="host-only">Host-Only (LAN Direct, 0 STUN)</option>
-            </select>
-          </div>
-
-          <div class="space-y-2">
-            <div class="flex items-center justify-between text-xs text-slate-400">
-              <span>Configured STUN `iceServers` (TURN blocked)</span>
-              <button id="btn-add-ice-server" type="button" class="text-indigo-400 hover:text-indigo-300 font-medium flex items-center gap-1">
-                + Add STUN Server
-              </button>
-            </div>
-            <div id="ice-servers-list" class="space-y-2 max-h-44 overflow-y-auto pr-1"></div>
-          </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 border-t border-slate-800/80">
-            <div>
-              <label class="block text-[11px] font-medium text-slate-400 mb-1">iceTransportPolicy</label>
-              <div class="w-full bg-slate-950 border border-emerald-500/30 rounded-lg px-2.5 py-1.5 text-xs font-mono text-emerald-300 flex items-center justify-between">
-                <span>all</span>
-                <span class="text-[10px] text-emerald-400/80">NO TURN</span>
-              </div>
-            </div>
-            <div>
-              <label for="cfg-signaling-mode" class="block text-[11px] font-medium text-slate-400 mb-1">Signaling Mode</label>
-              <select id="cfg-signaling-mode" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-indigo-500 focus:outline-none">
-                <option value="vanilla" selected>Vanilla ICE (Wait All)</option>
-                <option value="trickle">Trickle ICE (Stream)</option>
-              </select>
-            </div>
-            <div>
-              <label for="cfg-bundle-policy" class="block text-[11px] font-medium text-slate-400 mb-1">bundlePolicy</label>
-              <select id="cfg-bundle-policy" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-200 focus:border-indigo-500 focus:outline-none">
-                <option value="max-bundle" selected>max-bundle</option>
-                <option value="balanced">balanced</option>
-                <option value="max-compat">max-compat</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800/80 text-xs">
-            <div class="flex flex-wrap items-center gap-4">
-              <label class="inline-flex items-center gap-2 cursor-pointer text-slate-300">
-              <input type="checkbox" id="chk-datachannel" checked class="rounded bg-slate-950 border-slate-700 text-indigo-500 focus:ring-indigo-500">
-              <span>DataChannel (`p2p-diag`)</span>
-            </label>
-            <label class="inline-flex items-center gap-2 cursor-pointer text-slate-300">
-              <input type="checkbox" id="chk-auto-attach-media" checked class="rounded bg-slate-950 border-slate-700 text-indigo-500 focus:ring-indigo-500">
-              <span>Auto-Attach Local Media</span>
-            </label>
-            <label class="inline-flex items-center gap-2 cursor-pointer text-slate-300" title="Adds a synthetic silent audio track via Web Audio API so media candidates are gathered without camera/mic permissions">
-              <input type="checkbox" id="chk-synthetic-media" class="rounded bg-slate-950 border-slate-700 text-indigo-500 focus:ring-indigo-500">
-              <span>Synthetic Audio Track</span>
-            </label>
-          </div>
-          <label class="inline-flex items-center gap-2 cursor-pointer text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
-            <input type="checkbox" id="chk-wakelock" class="rounded bg-slate-950 border-slate-700 text-amber-500 focus:ring-amber-500">
-            <span>Screen Wake Lock</span>
+    <!-- Peer ID Handshake & Serverless Rendezvous Notice -->
+    <section class="bg-slate-900 border border-slate-800 rounded-xl p-4 sm:p-5 space-y-4">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+        <!-- My ID (Auto-generated + Copy + Regenerate) -->
+        <div class="lg:col-span-4">
+          <label for="my-id-display" class="block text-xs font-semibold text-emerald-300 mb-1.5">
+            My ID (Auto-Generated)
           </label>
-        </div>
-      </div>
-
-      <div class="pt-2 text-[11px] text-slate-500 flex flex-wrap items-center justify-between gap-2 border-t border-slate-800/60">
-        <span id="visibility-status-label" class="font-mono text-emerald-400">Visibility: foreground (visible)</span>
-        <span id="host-leak-status" class="font-mono text-amber-400/90">Host / mDNS check ready</span>
-      </div>
-    </section>
-
-    <!-- Right (7 cols): Active Path Inspector -->
-      <section class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
-        <div class="flex items-center justify-between gap-2">
-          <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <span class="w-5 h-5 rounded bg-slate-800 text-emerald-400 flex items-center justify-center text-xs font-mono">2</span>
-            Active Selected Path (`getStats()`)
-          </h2>
-          <span id="active-path-badge" class="px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-            NOT CONNECTED
-          </span>
-        </div>
-
-        <div id="path-visualizer" class="bg-slate-950 border border-slate-800/90 rounded-xl p-4">
-          <div class="grid grid-cols-1 sm:grid-cols-3 items-center gap-3 text-center">
-            <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3">
-              <div class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Local Candidate</div>
-              <div id="vis-local-type" class="text-sm font-mono font-bold text-slate-300 mt-1">—</div>
-              <div id="vis-local-addr" class="text-xs font-mono text-slate-400 mt-0.5 truncate">Waiting for ICE...</div>
-              <div id="vis-local-proto" class="text-[10px] font-mono text-indigo-400 mt-1">—</div>
-            </div>
-
-            <div class="flex flex-col items-center justify-center py-1">
-              <div id="vis-tunnel-label" class="text-[11px] font-mono font-semibold text-slate-400 mb-1.5">Awaiting Handshake</div>
-              <div class="w-full flex items-center gap-1">
-                <div class="h-0.5 flex-1 bg-slate-800" id="vis-line-left"></div>
-                <div id="vis-tunnel-pill" class="px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-[11px] font-mono text-slate-300">
-                  RTT: — ms
-                </div>
-                <div class="h-0.5 flex-1 bg-slate-800" id="vis-line-right"></div>
-              </div>
-              <div id="vis-pair-state" class="text-[10px] font-mono text-slate-500 mt-1.5">state: idle</div>
-            </div>
-
-            <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-3">
-              <div class="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">Remote Candidate</div>
-              <div id="vis-remote-type" class="text-sm font-mono font-bold text-slate-300 mt-1">—</div>
-              <div id="vis-remote-addr" class="text-xs font-mono text-slate-400 mt-0.5 truncate">Waiting for Peer...</div>
-              <div id="vis-remote-proto" class="text-[10px] font-mono text-emerald-400 mt-1">—</div>
-            </div>
+          <div class="flex items-center gap-1.5">
+            <input
+              id="my-id-display"
+              type="text"
+              readonly
+              aria-label="My generated Peer ID"
+              class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm font-mono font-semibold text-emerald-300 focus:outline-none"
+            />
+            <button
+              id="btn-copy-my-id"
+              type="button"
+              class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 px-3 py-2 rounded-lg text-xs font-medium transition shrink-0"
+              title="Copy My ID"
+            >
+              Copy
+            </button>
+            <button
+              id="btn-regen-my-id"
+              type="button"
+              class="bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-3 py-2 rounded-lg text-xs font-medium transition shrink-0"
+              title="Generate a new ID"
+            >
+              New
+            </button>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div class="bg-slate-950 border border-slate-800/80 rounded-lg p-3">
-          <div class="text-[11px] text-slate-500">Current RTT</div>
-          <div id="stat-rtt" class="text-base font-mono font-bold text-white mt-0.5">— ms</div>
+        <!-- Peer ID Input -->
+        <div class="lg:col-span-4">
+          <label for="peer-id-input" class="block text-xs font-semibold text-sky-300 mb-1.5">
+            Peer ID (Remote Target)
+          </label>
+          <input
+            id="peer-id-input"
+            type="text"
+            maxlength="24"
+            placeholder="Enter remote Peer ID (e.g. id-7k3m)"
+            class="w-full bg-slate-950 border border-slate-700 focus:border-sky-500 rounded-lg px-3 py-2 text-xs sm:text-sm font-mono text-white placeholder-slate-500 focus:outline-none"
+          />
         </div>
-        <div class="bg-slate-950 border border-slate-800/80 rounded-lg p-3">
-          <div class="text-[11px] text-slate-500">Bytes Sent / Recv</div>
-          <div id="stat-bytes" class="text-sm font-mono font-semibold text-slate-200 mt-1">0 B / 0 B</div>
-        </div>
-        <div class="bg-slate-950 border border-slate-800/80 rounded-lg p-3">
-          <div class="text-[11px] text-slate-500">Local Candidates</div>
-          <div id="stat-local-count" class="text-base font-mono font-bold text-indigo-400 mt-0.5">0</div>
-        </div>
-        <div class="bg-slate-950 border border-slate-800/80 rounded-lg p-3">
-          <div class="text-[11px] text-slate-500">Remote Candidates</div>
-          <div id="stat-remote-count" class="text-base font-mono font-bold text-emerald-400 mt-0.5">0</div>
-        </div>
-      </div>
-    </section>
-  </div>
 
-  <!-- Row 1.5: Peer-to-Peer Video & Audio Chat Studio -->
-  <section class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-    <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-      <div>
-        <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-          <span class="w-5 h-5 rounded bg-slate-800 text-rose-400 flex items-center justify-center text-xs font-mono">V</span>
-          Peer-to-Peer Video & Audio Chat
-        </h2>
-        <p class="text-xs text-slate-400 mt-0.5">Streams camera, microphone, or screen share directly over the same No-TURN WebRTC peer connection. Start media before or during signaling (or renegotiate if added mid-call).</p>
-      </div>
-
-      <!-- Live Audio/Video State Badges -->
-      <div class="flex flex-wrap items-center gap-2 text-[11px] font-mono">
-        <span id="media-badge-cam" class="px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-slate-400">Cam: off</span>
-        <span id="media-badge-mic" class="px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-slate-400">Mic: off</span>
-        <span id="media-badge-tracks" class="px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-slate-400">Local Tracks: 0</span>
-        <span id="media-badge-remote" class="px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-slate-400">Remote Stream: none</span>
-      </div>
-    </div>
-
-    <!-- Media Control Buttons -->
-  <!-- Row 2: Short Peer ID STUN Handshake + Manual SDP + ICE Signaling -->
-    <section class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-        <div>
-          <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <span class="w-5 h-5 rounded bg-slate-800 text-amber-400 flex items-center justify-center text-xs font-mono">3</span>
-            Short Peer ID STUN Handshake &amp; SDP/ICE Signaling
-          </h2>
-          <p class="text-xs text-slate-400 mt-0.5">Handshake using short Peer IDs over STUN (No-TURN) via local tab BroadcastChannel, URL hash, or compact ID-coded bundles—or copy/paste JSON directly.</p>
-        </div>
-        <div class="flex flex-wrap gap-2">
-          <button id="btn-create-offer" type="button" class="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition shadow">
-            Peer A: 1. Create Offer
+        <!-- Start Video Chat & Hangup/Reset -->
+        <div class="lg:col-span-4 flex flex-wrap sm:flex-nowrap items-center gap-2">
+          <button
+            id="btn-start-call"
+            type="button"
+            class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs sm:text-sm px-4 py-2 rounded-lg shadow transition flex items-center justify-center gap-2"
+          >
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Start Video Chat
           </button>
-          <button id="btn-create-answer" type="button" class="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition shadow">
-            Peer B: 2. Accept Offer &amp; Create Answer
-          </button>
-          <button id="btn-accept-answer" type="button" class="bg-sky-600 hover:bg-sky-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition shadow">
-            Peer A: 3. Apply Remote Answer
+          <button
+            id="btn-hangup"
+            type="button"
+            class="bg-rose-600 hover:bg-rose-500 text-white font-semibold text-xs sm:text-sm px-3.5 py-2 rounded-lg shadow transition shrink-0"
+          >
+            Hangup / Reset
           </button>
         </div>
       </div>
 
-      <!-- Short Peer ID Rendezvous Bar -->
-      <div class="bg-slate-950/90 border border-indigo-500/30 rounded-xl p-3.5 space-y-3">
-        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-          <div class="md:col-span-4">
-            <label for="input-local-peer-id" class="block text-[11px] font-semibold text-indigo-300 mb-1">
-              Local Peer ID (Short ID)
-            </label>
-            <div class="flex gap-1.5">
-              <input id="input-local-peer-id" type="text" maxlength="20" placeholder="e.g. peer-a8f2"
-                class="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none" />
-              <button id="btn-gen-peer-id" type="button" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono shrink-0" title="Generate new short ID">
-                New ID
-              </button>
-              <button id="btn-copy-peer-id" type="button" class="bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 px-2.5 py-1.5 rounded-lg text-xs font-mono shrink-0" title="Copy Local Peer ID">
-                Copy
+      <!-- Clear Serverless Browser-Only Signaling & Rendezvous Note -->
+      <div class="bg-slate-950/90 border border-amber-500/25 rounded-lg p-3 text-xs text-slate-300 space-y-2">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <p class="leading-relaxed">
+            <strong class="text-amber-300">Serverless Browser-Only Note:</strong>
+            STUN servers discover public IP/NAT candidates for direct P2P media &amp; DataChannel—they do <em>not</em> exchange SDP offers/answers or route IDs across separate devices on their own. This page uses a built-in <span class="font-mono text-emerald-300">BroadcastChannel</span> for instant same-origin/same-device tab signaling, plus a <strong>Manual Signaling Fallback</strong> below so two separate devices (or cross-origin tabs) can exchange offer/answer &amp; ICE JSON when not sharing a signaling server.
+          </p>
+          <button
+            id="btn-toggle-fallback"
+            type="button"
+            class="bg-slate-800 hover:bg-slate-700 text-amber-200 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium shrink-0 transition"
+          >
+            Manual Signaling Fallback
+          </button>
+        </div>
+
+        <!-- Collapsible Manual Copy/Paste Signaling Fallback -->
+        <div id="fallback-drawer" class="hidden pt-3 border-t border-slate-800 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <label for="local-signal-box" class="text-[11px] font-semibold text-indigo-300">
+                Local Signaling Payload (Offer / Answer + ICE)
+              </label>
+              <button
+                id="btn-copy-signal"
+                type="button"
+                class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2 py-0.5 rounded text-[11px]"
+              >
+                Copy Payload
               </button>
             </div>
+            <textarea
+              id="local-signal-box"
+              rows="4"
+              readonly
+              placeholder="Generated offer or answer JSON appears here for manual copy/paste between devices..."
+              class="w-full bg-slate-900 border border-slate-800 rounded-lg p-2 text-[11px] font-mono text-indigo-200 focus:outline-none"
+            ></textarea>
           </div>
-
-          <div class="md:col-span-4">
-            <label for="input-remote-peer-id" class="block text-[11px] font-semibold text-emerald-300 mb-1">
-              Remote Peer ID (Target ID)
-            </label>
-            <input id="input-remote-peer-id" type="text" maxlength="20" placeholder="e.g. peer-91c4"
-              class="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-lg px-2.5 py-1.5 text-xs font-mono text-white focus:outline-none" />
-          </div>
-
-          <div class="md:col-span-4 flex flex-wrap gap-1.5">
-            <button id="btn-id-offer" type="button" class="flex-1 bg-indigo-600/90 hover:bg-indigo-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
-              Offer by ID
-            </button>
-            <button id="btn-id-answer" type="button" class="flex-1 bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
-              Answer by ID
-            </button>
-            <button id="btn-id-apply-answer" type="button" class="flex-1 bg-sky-600/90 hover:bg-sky-500 text-white text-xs font-semibold px-2.5 py-1.5 rounded-lg transition">
-              Apply by ID
-            </button>
-          </div>
-        </div>
-
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-2 border-t border-slate-900 text-[11px] text-slate-400">
-          <div class="flex flex-wrap items-center gap-2">
-            <span id="id-rendezvous-status" class="font-mono text-emerald-400">Rendezvous: BroadcastChannel + Local ID Map ready</span>
-            <button id="btn-copy-id-code" type="button" class="text-indigo-300 hover:text-indigo-200 underline font-mono">
-              Copy Compact ID-Code
-            </button>
-            <button id="btn-share-hash-link" type="button" class="text-sky-300 hover:text-sky-200 underline font-mono">
-              Copy #Hash Link
-            </button>
-          </div>
-          <span class="text-[11px] text-slate-500">
-            <strong>How IDs work with STUN:</strong> STUN finds IP/NAT candidates; a lightweight rendezvous channel (BroadcastChannel, URL fragment, or public broker/PeerJS) maps short Peer IDs to SDP + ICE.
-          </span>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div class="space-y-2">
-          <div class="flex items-center justify-between">
-            <label for="txt-local-sdp" class="text-xs font-semibold text-slate-300 flex items-center gap-2">
-              <span>Local SDP + ICE Bundle</span>
-              <span id="local-sdp-status" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">empty</span>
-            </label>
-            <button id="btn-copy-local-sdp" type="button" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1 rounded border border-slate-700 transition flex items-center gap-1">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-              Copy Bundle
-            </button>
-          </div>
-          <textarea id="txt-local-sdp" readonly rows="6" placeholder="Click 'Peer A: 1. Create Offer' (or paste Remote Offer on the right and click 'Peer B: 2. Accept Offer & Create Answer')..." class="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-xs font-mono text-indigo-300 focus:outline-none resize-y"></textarea>
-        </div>
-
-        <div class="space-y-2">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <label for="txt-remote-sdp" class="text-xs font-semibold text-slate-300">
-              Remote SDP + ICE Bundle
-            </label>
-            <div class="flex items-center gap-2">
-              <button id="btn-paste-remote-sdp" type="button" class="bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs px-2.5 py-1 rounded border border-slate-700 transition">
-                Paste Clipboard
-              </button>
-              <button id="btn-add-trickle-ice" type="button" class="bg-slate-800 hover:bg-slate-700 text-amber-300 text-xs px-2.5 py-1 rounded border border-slate-700 transition">
-                + Add Extra ICE
-              </button>
-              <button id="btn-clear-remote-sdp" type="button" class="text-slate-500 hover:text-slate-300 text-xs px-1.5 py-1">
-                Clear
-              </button>
-            </div>
-          </div>
-          <textarea id="txt-remote-sdp" rows="6" placeholder="Paste the JSON bundle or raw SDP received from the remote peer here..." class="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-lg p-3 text-xs font-mono text-emerald-300 focus:outline-none resize-y"></textarea>
-        </div>
-      </div>
-    </section>
-
-    <!-- Row 3: DataChannel Keepalive Engine + Diagnostic Event Timeline -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-      <!-- Left (5 cols): DataChannel & Keepalive Heartbeat -->
-      <section class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-4">
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-              <span class="w-5 h-5 rounded bg-slate-800 text-sky-400 flex items-center justify-center text-xs font-mono">4</span>
-              DataChannel & Auto-Keepalive
-            </h2>
-            <span id="dc-state-badge" class="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">DC: closed</span>
-          </div>
-
-          <div class="bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2.5">
-            <div class="flex items-center justify-between gap-2">
-              <label class="inline-flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-200">
-                <input type="checkbox" id="chk-auto-keepalive" checked class="rounded bg-slate-900 border-slate-700 text-emerald-500 focus:ring-emerald-500">
-                <span>Auto-Keepalive Heartbeat</span>
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between">
+              <label for="remote-signal-box" class="text-[11px] font-semibold text-emerald-300">
+                Remote Signaling Payload (Paste &amp; Apply)
               </label>
               <div class="flex items-center gap-1.5">
-                <label for="sel-keepalive-interval" class="text-[11px] text-slate-400">Interval:</label>
-                <select id="sel-keepalive-interval" class="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-xs font-mono text-emerald-300 focus:outline-none">
-                  <option value="2000">2s</option>
-                  <option value="5000" selected>5s</option>
-                  <option value="10000">10s</option>
-                  <option value="15000">15s</option>
-                  <option value="30000">30s</option>
-                </select>
+                <button
+                  id="btn-paste-signal"
+                  type="button"
+                  class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-2 py-0.5 rounded text-[11px]"
+                >
+                  Paste
+                </button>
+                <button
+                  id="btn-apply-signal"
+                  type="button"
+                  class="bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-0.5 rounded text-[11px] font-semibold"
+                >
+                  Apply Payload
+                </button>
               </div>
             </div>
-
-            <div class="grid grid-cols-3 gap-2 pt-1.5 border-t border-slate-900 text-[11px] font-mono">
-              <div>
-                <div class="text-slate-500 text-[10px]">Sent / Acks</div>
-                <div id="ka-counters" class="text-slate-200 font-semibold">0 / 0</div>
-              </div>
-              <div>
-                <div class="text-slate-500 text-[10px]">Rolling RTT</div>
-                <div id="ka-rtt" class="text-sky-400 font-semibold">— ms</div>
-              </div>
-              <div>
-                <div class="text-slate-500 text-[10px]">Last Remote Pkt</div>
-                <div id="ka-silence" class="text-emerald-400 font-semibold">waiting</div>
-              </div>
-            </div>
-          </div>
-
-          <div id="dc-messages" class="h-36 bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-y-auto space-y-1.5 text-xs font-mono">
-            <div class="text-slate-500 italic">Connect peers to start automatic keepalive heartbeats and test P2P messaging...</div>
+            <textarea
+              id="remote-signal-box"
+              rows="4"
+              placeholder="Paste remote offer or answer JSON here and click Apply Payload..."
+              class="w-full bg-slate-900 border border-slate-800 focus:border-emerald-500 rounded-lg p-2 text-[11px] font-mono text-emerald-200 focus:outline-none"
+            ></textarea>
           </div>
         </div>
+      </div>
+    </section>
 
-        <div class="space-y-2">
-          <div class="flex gap-2">
-            <input type="text" id="dc-input" placeholder="Send P2P message over DataChannel..." disabled class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50" />
-            <button id="btn-dc-send" type="button" disabled class="bg-indigo-600 hover:bg-indigo-500 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold px-3.5 py-2 rounded-lg transition">
-              Send
-            </button>
-          </div>
-          <div class="flex items-center justify-between gap-2">
-            <button id="btn-dc-ping" type="button" disabled class="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-emerald-300 border border-slate-700 text-xs font-mono py-1.5 rounded-lg transition">
-              Manual Ping
-            </button>
-            <button id="btn-dc-burst" type="button" disabled class="flex-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-sky-300 border border-slate-700 text-xs font-mono py-1.5 rounded-lg transition">
-              64KB Throughput Burst
-            </button>
+    <!-- Video Feeds (Local & Remote) -->
+    <section class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <!-- Local Video -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+        <div class="px-4 py-2.5 bg-slate-950/70 border-b border-slate-800 flex items-center justify-between text-xs">
+          <span class="font-semibold text-slate-200">Local Camera &amp; Mic</span>
+          <span id="local-media-status" class="font-mono text-slate-400">idle</span>
+        </div>
+        <div class="relative aspect-video bg-slate-950 flex items-center justify-center overflow-hidden">
+          <video
+            id="local-video"
+            playsinline
+            autoplay
+            muted
+            class="w-full h-full object-cover scale-x-[-1]"
+          ></video>
+          <div id="local-video-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-xs px-4 text-center pointer-events-none">
+            <span>Camera preview will appear when video chat starts</span>
           </div>
         </div>
-      </section>
+        <div class="p-3 bg-slate-900 border-t border-slate-800 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <button
+              id="btn-toggle-cam"
+              type="button"
+              class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition"
+            >
+              Camera: ON
+            </button>
+            <button
+              id="btn-toggle-mic"
+              type="button"
+              class="bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition"
+            >
+              Mic: ON
+            </button>
+          </div>
+          <span id="local-stream-info" class="text-[11px] font-mono text-slate-500">No tracks</span>
+        </div>
+      </div>
 
-      <!-- Right (7 cols): Diagnostic Event Timeline -->
-      <section class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-5 flex flex-col justify-between space-y-3">
-        <div class="flex items-center justify-between">
-          <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <span class="w-5 h-5 rounded bg-slate-800 text-purple-400 flex items-center justify-center text-xs font-mono">5</span>
-            WebRTC, Keepalive & Visibility Timeline
+      <!-- Remote Video -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden flex flex-col">
+        <div class="px-4 py-2.5 bg-slate-950/70 border-b border-slate-800 flex items-center justify-between text-xs">
+          <span class="font-semibold text-slate-200">Remote Peer Video</span>
+          <span id="remote-media-status" class="font-mono text-slate-400">waiting for peer</span>
+        </div>
+        <div class="relative aspect-video bg-slate-950 flex items-center justify-center overflow-hidden">
+          <video
+            id="remote-video"
+            playsinline
+            autoplay
+            class="w-full h-full object-cover"
+          ></video>
+          <div id="remote-video-placeholder" class="absolute inset-0 flex flex-col items-center justify-center text-slate-500 text-xs px-4 text-center pointer-events-none">
+            <span>Waiting for remote video stream...</span>
+          </div>
+        </div>
+        <div class="p-3 bg-slate-900 border-t border-slate-800 flex items-center justify-between gap-2">
+          <span id="remote-peer-label" class="text-[11px] font-mono text-slate-400">Peer: none</span>
+          <span id="remote-stream-info" class="text-[11px] font-mono text-slate-500">No remote tracks</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Bottom Grid: DataChannel Text Chat + Live Event Log -->
+    <section class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+      <!-- WebRTC DataChannel Text Chat -->
+      <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col h-80">
+        <div class="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-sky-300">
+            DataChannel Text Chat
           </h2>
-          <button id="btn-clear-logs" type="button" class="text-xs text-slate-400 hover:text-white px-2 py-1 rounded hover:bg-slate-800">
+          <span id="chat-status-badge" class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400">
+            Disconnected
+          </span>
+        </div>
+
+        <div id="chat-messages" class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs font-mono bg-slate-950/80 border border-slate-800/80 rounded-lg p-3">
+          <div class="text-slate-500 italic font-sans">
+            Connect to a peer to send messages directly over the WebRTC DataChannel.
+          </div>
+        </div>
+
+        <form id="chat-form" class="mt-3 flex items-center gap-2">
+          <input
+            id="chat-input"
+            type="text"
+            placeholder="Type a chat message..."
+            disabled
+            autocomplete="off"
+            class="flex-1 bg-slate-950 border border-slate-700 focus:border-sky-500 disabled:opacity-50 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none"
+          />
+          <button
+            id="btn-chat-send"
+            type="submit"
+            disabled
+            class="bg-sky-600 hover:bg-sky-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-semibold px-4 py-2 rounded-lg text-xs transition shrink-0"
+          >
+            Send
+          </button>
+        </form>
+      </div>
+
+      <!-- Live Diagnostics / Event Log -->
+      <div class="lg:col-span-7 bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col h-80">
+        <div class="flex items-center justify-between pb-2.5 mb-2.5 border-b border-slate-800">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-amber-300">
+            Live Diagnostics &amp; Event Log
+          </h2>
+          <button
+            id="btn-clear-log"
+            type="button"
+            class="text-xs text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 border border-slate-700 px-2.5 py-1 rounded transition"
+          >
             Clear Log
           </button>
         </div>
-        <div id="event-log" class="h-72 bg-slate-950 border border-slate-800 rounded-lg p-3 overflow-y-auto font-mono text-[11px] space-y-1"></div>
-      </section>
-    </div>
 
-    <!-- Row 4: ICE Candidate Harvester Table -->
-    <section class="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-4">
-      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-        <div>
-          <h2 class="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-            <span class="w-5 h-5 rounded bg-slate-800 text-teal-400 flex items-center justify-center text-xs font-mono">6</span>
-            ICE Candidate Harvester & Path Table
-          </h2>
-          <p class="text-xs text-slate-400 mt-0.5">Discovered candidates (`host` = direct LAN/mDNS, `srflx` = STUN public NAT mapping, `prflx` = peer reflexive).</p>
-        </div>
-        <div class="flex flex-wrap gap-2 text-[11px] font-mono">
-          <span class="px-2 py-1 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20">host: Direct LAN</span>
-          <span class="px-2 py-1 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">srflx: STUN NAT</span>
-          <span class="px-2 py-1 rounded bg-teal-500/10 text-teal-300 border border-teal-500/20">prflx: Peer Reflexive</span>
-        </div>
-      </div>
-
-      <div class="overflow-x-auto border border-slate-800 rounded-lg">
-        <table class="w-full text-left border-collapse text-xs font-mono">
-          <thead>
-            <tr class="bg-slate-950 text-slate-400 border-b border-slate-800 text-[11px] uppercase">
-              <th class="py-2.5 px-3">Side</th>
-              <th class="py-2.5 px-3">Type</th>
-              <th class="py-2.5 px-3">Protocol</th>
-              <th class="py-2.5 px-3">Address</th>
-              <th class="py-2.5 px-3">Port</th>
-              <th class="py-2.5 px-3">Related (raddr)</th>
-              <th class="py-2.5 px-3">Priority</th>
-              <th class="py-2.5 px-3">Path Interpretation</th>
-            </tr>
-          </thead>
-          <tbody id="candidates-tbody" class="divide-y divide-slate-800/70 bg-slate-900/40">
-            <tr>
-              <td colspan="8" class="py-6 text-center text-slate-500 font-sans">No ICE candidates gathered yet. Create an Offer, Accept an Offer, or run the Path Matrix.</td>
-            </tr>
-          </tbody>
-        </table>
+        <div id="event-log" class="flex-1 overflow-y-auto space-y-1 bg-slate-950 border border-slate-800/80 rounded-lg p-3 font-mono text-[11px]"></div>
       </div>
     </section>
 
   </main>
 
-  <footer class="border-t border-slate-900 py-4 px-6 text-center text-xs text-slate-500">
-    WebRTC P2P Connection & ICE Diagnostics Studio • No-TURN Direct Peer-to-Peer + Keepalive Heartbeat
-  </footer>
-
   <script>
     /**
-     * WebRTC P2P Connection & ICE Diagnostics Studio (No-TURN Direct P2P + Auto-Keepalive)
-     * All lifecycle, stats polling, keepalive, visibility, and signaling helpers are defined
-     * explicitly in top-level script scope before being referenced.
+     * WebRTC STUN Video Chat (No TURN)
+     * - Auto-generates a short "My ID" with Copy & New controls.
+     * - Connects to "Peer ID" using pure STUN iceServers (no TURN servers configured).
+     * - Streams local/remote audio & video via <video playsinline autoplay> with cam/mic/hangup controls.
+     * - Provides a WebRTC DataChannel text chat box and live diagnostics event log.
+     * - Uses BroadcastChannel for automatic same-origin/same-device tab signaling, plus manual copy/paste
+     *   signaling fallback for separate devices or cross-origin contexts.
      */
 
-    // =========================================================================
-    // 1. NO-TURN STUN PRESETS & APPLICATION STATE
-    // =========================================================================
-    const ICE_PRESETS = {
-      'google-stun': [
+    // Pure STUN configuration (intentionally NO TURN servers)
+    const RTC_CONFIG = {
+      iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ],
-      'multi-stun': [
-        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun.cloudflare.com:3478' }
       ],
-      'host-only': []
+      iceTransportPolicy: 'all',
+      bundlePolicy: 'max-bundle'
     };
 
-    /**
-     * Browser-only Rendezvous / Signaling explanation:
-     * STUN servers (No-TURN) only discover reflexive public NAT candidates (srflx) so peers
-     * can attempt direct hole-punching—they do NOT match two peers by short ID or exchange SDP.
-     * In a serverless browser setup, a rendezvous layer (such as BroadcastChannel across same-origin
-     * tabs, a URL #fragment, a compact ID-prefixed code, or an external public signaling broker /
-     * PeerJS-style directory) maps a short Peer ID to that peer's latest SDP + STUN ICE bundle.
-     */
-    const RENDEZVOUS_CHANNEL_NAME = 'webrtc-p2p-id-rendezvous-v1';
+    const CHANNEL_NAME = 'webrtc-stun-video-chat-v1';
 
-    const appState = {
+    const state = {
+      myId: '',
+      targetPeerId: '',
+      connectedPeerId: '',
       pc: null,
       dc: null,
-      role: null, // 'caller' | 'callee'
-      localPeerId: '',
-      remotePeerId: '',
-      idDirectory: {}, // Maps short peerId -> latest { fromId, toId, role, bundle, updatedAt }
-      broadcastChannel: null,
-      iceServers: JSON.parse(JSON.stringify(ICE_PRESETS['google-stun'])),
-      localCandidates: [],
-      remoteCandidates: [],
       localStream: null,
-      screenStream: null,
       remoteStream: null,
-      mediaSenders: [],
+      localCandidates: [],
+      remoteCandidateQueue: [],
+      remoteDescriptionSet: false,
+      isInitiator: false,
       cameraEnabled: true,
       micEnabled: true,
-      screenSharing: false,
-      statsInterval: null,
-      keepaliveTimer: null,
-      silenceMonitorTimer: null,
-      keepaliveSeq: 0,
-      keepaliveStats: {
-        sent: 0,
-        acksReceived: 0,
-        lastRttMs: null,
-        lastPongAt: null,
-        lastRemotePacketAt: null
-      },
-      visibilityEvents: [],
-      wakeLockSentinel: null,
-      logs: [],
-      activePairSummary: null
+      channel: null
     };
 
     // =========================================================================
-    // 2. UI UTILITIES, TOASTS & LOGGING
+    // UI HELPERS, TOASTS & LOGGING
     // =========================================================================
-    function escapeHtml(str) {
-      return String(str ?? '').replace(/[&<>"']/g, m => ({
+    function showToast(message, variant = 'info') {
+      const stack = document.getElementById('toast-stack');
+      if (!stack) return;
+      const el = document.createElement('div');
+      const palette = {
+        info: 'bg-slate-800 border-slate-700 text-slate-100',
+        success: 'bg-emerald-950 border-emerald-700 text-emerald-200',
+        warn: 'bg-amber-950 border-amber-700 text-amber-200',
+        error: 'bg-rose-950 border-rose-700 text-rose-200'
+      };
+      el.className = `px-3.5 py-2.5 rounded-lg border text-xs font-medium shadow-xl transition-opacity duration-300 ${palette[variant] || palette.info}`;
+      el.textContent = message;
+      stack.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 300);
+      }, 3000);
+    }
+
+    function escapeHtml(text) {
+      return String(text ?? '').replace(/[&<>"']/g, ch => ({
         '&': '&amp;',
         '<': '&lt;',
         '>': '&gt;',
         '"': '&quot;',
         "'": '&#39;'
-      }[m]));
+      }[ch]));
     }
 
-    function showToast(message, type = 'info') {
-      const container = document.getElementById('toast-container');
-      if (!container) return;
-      const toast = document.createElement('div');
-      const styles = {
-        info: 'bg-slate-800 border-slate-700 text-slate-100',
-        success: 'bg-emerald-950/95 border-emerald-700 text-emerald-200',
-        warn: 'bg-amber-950/95 border-amber-700 text-amber-200',
-        error: 'bg-rose-950/95 border-rose-700 text-rose-200'
-      };
-      toast.className = `pointer-events-auto px-4 py-2.5 rounded-lg border shadow-xl text-xs font-medium transition-opacity duration-300 ${styles[type] || styles.info}`;
-      toast.textContent = message;
-      container.appendChild(toast);
-      setTimeout(() => {
-        toast.style.opacity = '0';
-        setTimeout(() => toast.remove(), 300);
-      }, 3200);
-    }
-
-    function logEvent(message, level = 'info') {
-      const ts = new Date().toISOString().split('T')[1].slice(0, 12);
-      appState.logs.push({ ts, level, message });
-      const logEl = document.getElementById('event-log');
-      if (!logEl) return;
-      const row = document.createElement('div');
-      const colors = {
+    function logEvent(category, message, level = 'info') {
+      const logBox = document.getElementById('event-log');
+      if (!logBox) return;
+      const now = new Date().toISOString().split('T')[1].slice(0, 12);
+      const levelColors = {
         info: 'text-slate-300',
-        success: 'text-emerald-400 font-semibold',
+        success: 'text-emerald-400',
         warn: 'text-amber-400',
         error: 'text-rose-400 font-semibold',
         ice: 'text-sky-400'
       };
-      row.innerHTML = `<span class="text-slate-600">[${ts}]</span> <span class="${colors[level] || colors.info}">${escapeHtml(message)}</span>`;
-      logEl.appendChild(row);
-      logEl.scrollTop = logEl.scrollHeight;
+      const row = document.createElement('div');
+      row.innerHTML = `<span class="text-slate-600">[${now}]</span> <span class="text-indigo-400 font-semibold">[${escapeHtml(category)}]</span> <span class="${levelColors[level] || levelColors.info}">${escapeHtml(message)}</span>`;
+      logBox.appendChild(row);
+      logBox.scrollTop = logBox.scrollHeight;
     }
 
-    function formatBytes(bytes) {
-      const n = Number(bytes) || 0;
-      if (n < 1024) return `${n} B`;
-      if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-      return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+    function updateStateBadges() {
+      const pc = state.pc;
+      const dc = state.dc;
+
+      const setBadge = (id, value, goodVals = [], warnVals = [], badVals = []) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = value;
+        if (goodVals.includes(value)) {
+          el.className = 'font-semibold text-emerald-400';
+        } else if (warnVals.includes(value)) {
+          el.className = 'font-semibold text-amber-400';
+        } else if (badVals.includes(value)) {
+          el.className = 'font-semibold text-rose-400';
+        } else {
+          el.className = 'font-semibold text-slate-300';
+        }
+      };
+
+      setBadge(
+        'state-conn',
+        pc ? pc.connectionState : 'new',
+        ['connected'],
+        ['connecting'],
+        ['failed', 'disconnected', 'closed']
+      );
+      setBadge(
+        'state-ice',
+        pc ? pc.iceConnectionState : 'new',
+        ['connected', 'completed'],
+        ['checking'],
+        ['failed', 'disconnected', 'closed']
+      );
+      setBadge(
+        'state-sig',
+        pc ? pc.signalingState : 'stable',
+        ['stable'],
+        ['have-local-offer', 'have-remote-offer'],
+        ['closed']
+      );
+
+      const dcState = dc ? dc.readyState : 'closed';
+      setBadge('state-dc', dcState, ['open'], ['connecting'], ['closing', 'closed']);
+
+      const chatBadge = document.getElementById('chat-status-badge');
+      const chatInput = document.getElementById('chat-input');
+      const chatSend = document.getElementById('btn-chat-send');
+      const isOpen = dcState === 'open';
+      if (chatBadge) {
+        chatBadge.textContent = isOpen ? 'Connected' : dcState === 'connecting' ? 'Connecting...' : 'Disconnected';
+        chatBadge.className = isOpen
+          ? 'text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+          : 'text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400';
+      }
+      if (chatInput) chatInput.disabled = !isOpen;
+      if (chatSend) chatSend.disabled = !isOpen;
     }
 
-    function copyTextToClipboard(text) {
+    function copyToClipboard(text, label = 'Text') {
       if (!text) {
-        showToast('Nothing to copy yet.', 'warn');
+        showToast(`Nothing to copy for ${label}.`, 'warn');
         return;
       }
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(
+          () => showToast(`${label} copied to clipboard.`, 'success'),
+          () => fallbackCopy(text, label)
+        );
+      } else {
+        fallbackCopy(text, label);
+      }
+    }
+
+    function fallbackCopy(text, label) {
       const ta = document.createElement('textarea');
       ta.value = text;
       ta.style.position = 'fixed';
@@ -676,1858 +516,623 @@
       ta.select();
       try {
         document.execCommand('copy');
-        showToast('Copied bundle to clipboard.', 'success');
+        showToast(`${label} copied to clipboard.`, 'success');
       } catch (_) {
-        showToast('Automatic copy blocked; select and copy manually.', 'warn');
+        showToast(`Could not copy ${label} automatically.`, 'warn');
       } finally {
         document.body.removeChild(ta);
       }
     }
 
     // =========================================================================
-    // 3. STATS POLLING & ACTIVE PATH INSPECTION (EXPLICIT TOP-LEVEL DEFS)
+    // PEER ID MANAGEMENT & BROADCASTCHANNEL RENDEZVOUS
     // =========================================================================
-    function stopStatsPolling() {
-      if (appState.statsInterval !== null && appState.statsInterval !== undefined) {
-        clearInterval(appState.statsInterval);
-        appState.statsInterval = null;
+    function generateShortId() {
+      const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789';
+      let code = '';
+      for (let i = 0; i < 5; i += 1) {
+        code += alphabet[Math.floor(Math.random() * alphabet.length)];
       }
+      return `peer-${code}`;
     }
 
-    function classifyPathLabel(localCand, remoteCand) {
-      const lType = localCand?.candidateType || 'unknown';
-      const rType = remoteCand?.candidateType || 'unknown';
-      if (lType === 'relay' || rType === 'relay') {
-        return `RELAYED (${lType} ↔ ${rType})`;
-      }
-      if (lType === 'host' && rType === 'host') {
-        return 'DIRECT LAN / HOST (host ↔ host)';
-      }
-      if (lType === 'srflx' && rType === 'srflx') {
-        return 'NAT HOLE-PUNCHED (srflx ↔ srflx)';
-      }
-      return `DIRECT P2P (${lType} ↔ ${rType})`;
+    function setMyId(newId) {
+      state.myId = newId;
+      const display = document.getElementById('my-id-display');
+      if (display) display.value = newId;
+      logEvent('ID', `My ID set to "${newId}".`, 'info');
     }
 
-    function updatePathVisualizer(summary) {
-      const badge = document.getElementById('active-path-badge');
-      const lTypeEl = document.getElementById('vis-local-type');
-      const lAddrEl = document.getElementById('vis-local-addr');
-      const lProtoEl = document.getElementById('vis-local-proto');
-      const rTypeEl = document.getElementById('vis-remote-type');
-      const rAddrEl = document.getElementById('vis-remote-addr');
-      const rProtoEl = document.getElementById('vis-remote-proto');
-      const tunnelLabelEl = document.getElementById('vis-tunnel-label');
-      const tunnelPillEl = document.getElementById('vis-tunnel-pill');
-      const pairStateEl = document.getElementById('vis-pair-state');
-      const lineLeft = document.getElementById('vis-line-left');
-      const lineRight = document.getElementById('vis-line-right');
-      const rttStatEl = document.getElementById('stat-rtt');
-      const bytesStatEl = document.getElementById('stat-bytes');
+    function sendSignalingMessage(payload) {
+      const message = {
+        ...payload,
+        fromId: state.myId,
+        sentAt: Date.now()
+      };
 
-      if (!summary) {
-        badge.textContent = 'NOT CONNECTED';
-        badge.className = 'px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-slate-800 text-slate-400 border border-slate-700';
-        return;
+      // Update local fallback payload box so user can also copy/paste across devices
+      const localBox = document.getElementById('local-signal-box');
+      if (localBox) {
+        localBox.value = JSON.stringify(message, null, 2);
       }
 
-      const rttText = summary.rttMs != null ? `${Number(summary.rttMs).toFixed(1)} ms` : '— ms';
-      badge.textContent = summary.pathLabel;
-      badge.className = 'px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30';
-
-      lTypeEl.textContent = summary.local.type || 'unknown';
-      lAddrEl.textContent = `${summary.local.address || '?'}:${summary.local.port || '?'}`;
-      lAddrEl.title = `${summary.local.address || '?'}:${summary.local.port || '?'}`;
-      lProtoEl.textContent = (summary.local.protocol || 'udp').toUpperCase();
-
-      rTypeEl.textContent = summary.remote.type || 'unknown';
-      rAddrEl.textContent = `${summary.remote.address || '?'}:${summary.remote.port || '?'}`;
-      rAddrEl.title = `${summary.remote.address || '?'}:${summary.remote.port || '?'}`;
-      rProtoEl.textContent = (summary.remote.protocol || 'udp').toUpperCase();
-
-      tunnelLabelEl.textContent = summary.pathLabel;
-      tunnelLabelEl.className = 'text-[11px] font-mono font-semibold text-emerald-400 mb-1.5';
-      tunnelPillEl.textContent = `RTT: ${rttText}`;
-      tunnelPillEl.className = 'px-2.5 py-1 rounded bg-emerald-950/80 border border-emerald-700/60 text-[11px] font-mono text-emerald-200';
-      pairStateEl.textContent = `pair state: ${summary.pairState || 'succeeded'}`;
-      lineLeft.className = 'h-0.5 flex-1 bg-emerald-500/60';
-      lineRight.className = 'h-0.5 flex-1 bg-emerald-500/60';
-
-      rttStatEl.textContent = rttText;
-      bytesStatEl.textContent = `${formatBytes(summary.bytesSent)} / ${formatBytes(summary.bytesReceived)}`;
-    }
-
-    async function inspectActiveStats() {
-      const pc = appState.pc;
-      if (!pc || pc.connectionState === 'closed') return;
-
-      try {
-        const stats = await pc.getStats();
-        const candidatesById = new Map();
-        let selectedPair = null;
-        let fallbackSucceededPair = null;
-        let totalSent = 0;
-        let totalRecv = 0;
-
-        stats.forEach(report => {
-          if (report.type === 'local-candidate' || report.type === 'remote-candidate') {
-            candidatesById.set(report.id, report);
-          } else if (report.type === 'transport' && report.selectedCandidatePairId) {
-            selectedPair = stats.get(report.selectedCandidatePairId) || null;
-          } else if (report.type === 'candidate-pair') {
-            if (report.selected || report.nominated) {
-              selectedPair = report;
-            } else if (report.state === 'succeeded' && !fallbackSucceededPair) {
-              fallbackSucceededPair = report;
-            }
-          } else if (report.type === 'data-channel') {
-            totalSent += Number(report.bytesSent || 0);
-            totalRecv += Number(report.bytesReceived || 0);
-          }
-        });
-
-        const pair = selectedPair || fallbackSucceededPair;
-        if (!pair) return;
-
-        const localCand = candidatesById.get(pair.localCandidateId) || null;
-        const remoteCand = candidatesById.get(pair.remoteCandidateId) || null;
-
-        const pairBytesSent = Number(pair.bytesSent || 0) || totalSent;
-        const pairBytesRecv = Number(pair.bytesReceived || 0) || totalRecv;
-        const rttMs = pair.currentRoundTripTime != null
-          ? (Number(pair.currentRoundTripTime) * 1000).toFixed(1)
-          : null;
-
-        const prevLabel = appState.activePairSummary?.pathLabel;
-        const pathLabel = classifyPathLabel(localCand, remoteCand);
-
-        const summary = {
-          pathLabel,
-          pairState: pair.state || 'succeeded',
-          local: {
-            type: localCand?.candidateType || 'unknown',
-            address: localCand?.address || localCand?.ip || 'unknown',
-            port: localCand?.port ?? '?',
-            protocol: localCand?.protocol || 'udp'
-          },
-          remote: {
-            type: remoteCand?.candidateType || 'unknown',
-            address: remoteCand?.address || remoteCand?.ip || 'unknown',
-            port: remoteCand?.port ?? '?',
-            protocol: remoteCand?.protocol || 'udp'
-          },
-          rttMs,
-          bytesSent: pairBytesSent,
-          bytesReceived: pairBytesRecv
-        };
-
-        appState.activePairSummary = summary;
-        updatePathVisualizer(summary);
-
-        if (prevLabel !== pathLabel) {
-          logEvent(`Active ICE path nominated: ${pathLabel} (${summary.local.address}:${summary.local.port} ↔ ${summary.remote.address}:${summary.remote.port})`, 'success');
-        }
-      } catch (err) {
-        logEvent(`getStats() inspection error: ${err.message}`, 'warn');
-      }
-    }
-
-    function startStatsPolling() {
-      stopStatsPolling();
-      inspectActiveStats();
-      appState.statsInterval = setInterval(inspectActiveStats, 2000);
-    }
-
-    // =========================================================================
-    // 3.5 LOCAL & REMOTE MEDIA / VIDEO CHAT ENGINE
-    // =========================================================================
-    function updateMediaUiBadges() {
-      const camBadge = document.getElementById('media-badge-cam');
-      const micBadge = document.getElementById('media-badge-mic');
-      const tracksBadge = document.getElementById('media-badge-tracks');
-      const remoteBadge = document.getElementById('media-badge-remote');
-
-      const btnToggleCam = document.getElementById('btn-toggle-cam');
-      const btnToggleMic = document.getElementById('btn-toggle-mic');
-      const btnToggleScreen = document.getElementById('btn-toggle-screenshare');
-      const btnStopMedia = document.getElementById('btn-stop-media');
-      const btnRenegotiate = document.getElementById('btn-renegotiate-media');
-
-      const activeStream = appState.screenStream || appState.localStream;
-      const videoTracks = activeStream ? activeStream.getVideoTracks() : [];
-      const audioTracks = (appState.localStream ? appState.localStream.getAudioTracks() : []);
-      const totalTracks = videoTracks.length + audioTracks.length;
-
-      const hasCam = videoTracks.length > 0;
-      const hasMic = audioTracks.length > 0;
-
-      if (!hasCam) {
-        camBadge.textContent = 'Cam: off';
-        camBadge.className = 'px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-slate-400';
-      } else if (appState.cameraEnabled && videoTracks.some(t => t.enabled)) {
-        camBadge.textContent = appState.screenSharing ? 'Cam: screen active' : 'Cam: active';
-        camBadge.className = 'px-2.5 py-1 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300';
-      } else {
-        camBadge.textContent = 'Cam: disabled';
-        camBadge.className = 'px-2.5 py-1 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300';
-      }
-
-      if (!hasMic) {
-        micBadge.textContent = 'Mic: off';
-        micBadge.className = 'px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-slate-400';
-      } else if (appState.micEnabled && audioTracks.some(t => t.enabled)) {
-        micBadge.textContent = 'Mic: active';
-        micBadge.className = 'px-2.5 py-1 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300';
-      } else {
-        micBadge.textContent = 'Mic: muted';
-        micBadge.className = 'px-2.5 py-1 rounded bg-rose-500/15 border border-rose-500/30 text-rose-300';
-      }
-
-      tracksBadge.textContent = `Local Tracks: ${totalTracks} (V:${videoTracks.length}/A:${audioTracks.length})`;
-      tracksBadge.className = `px-2.5 py-1 rounded bg-slate-950 border ${totalTracks > 0 ? 'border-indigo-500/30 text-indigo-300' : 'border-slate-800 text-slate-400'}`;
-
-      const rStream = appState.remoteStream;
-      const rVideo = rStream ? rStream.getVideoTracks().length : 0;
-      const rAudio = rStream ? rStream.getAudioTracks().length : 0;
-      if (rStream && (rVideo + rAudio) > 0) {
-        remoteBadge.textContent = `Remote Stream: V:${rVideo} A:${rAudio}`;
-        remoteBadge.className = 'px-2.5 py-1 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300';
-      } else {
-        remoteBadge.textContent = 'Remote Stream: none';
-        remoteBadge.className = 'px-2.5 py-1 rounded bg-slate-950 border border-slate-800 text-slate-400';
-      }
-
-      btnToggleCam.disabled = !hasCam;
-      btnToggleCam.textContent = appState.cameraEnabled ? 'Disable Camera' : 'Enable Camera';
-
-      btnToggleMic.disabled = !hasMic;
-      btnToggleMic.textContent = appState.micEnabled ? 'Mute Mic' : 'Unmute Mic';
-
-      btnToggleScreen.textContent = appState.screenSharing ? 'Stop Screen Share' : 'Share Screen';
-      btnStopMedia.disabled = totalTracks === 0 && !appState.screenSharing;
-      btnRenegotiate.disabled = !appState.pc || totalTracks === 0;
-    }
-
-    function syncLocalVideoElement() {
-      const videoEl = document.getElementById('video-local');
-      const placeholder = document.getElementById('local-video-placeholder');
-      const statusText = document.getElementById('local-video-status-text');
-      const metaEl = document.getElementById('local-video-meta');
-
-      const displayStream = appState.screenStream || appState.localStream;
-      const vTracks = displayStream ? displayStream.getVideoTracks() : [];
-      const aTracks = appState.localStream ? appState.localStream.getAudioTracks() : [];
-
-      if (displayStream && vTracks.length > 0 && appState.cameraEnabled) {
-        videoEl.srcObject = displayStream;
-        videoEl.play().catch(() => {});
-        placeholder.classList.add('hidden');
-        const label = appState.screenSharing ? 'Screen Share' : (vTracks[0].label || 'Camera');
-        metaEl.textContent = `${label} (${aTracks.length ? 'Audio+Video' : 'Video Only'})`;
-      } else {
-        videoEl.srcObject = null;
-        placeholder.classList.remove('hidden');
-        if (aTracks.length > 0 && !hasVideo(vTracks)) {
-          statusText.textContent = 'Audio-only active (no camera track available).';
-          metaEl.textContent = 'Audio Only';
-        } else if (!appState.cameraEnabled && vTracks.length > 0) {
-          statusText.textContent = 'Local camera paused / disabled.';
-          metaEl.textContent = 'Camera Disabled';
-        } else {
-          statusText.textContent = 'Camera & microphone not started.';
-          metaEl.textContent = 'No local video stream';
-        }
-      }
-      updateMediaUiBadges();
-    }
-
-    function hasVideo(vTracks) {
-      return Array.isArray(vTracks) && vTracks.length > 0;
-    }
-
-    function ensureRemoteStream() {
-      if (!appState.remoteStream) {
-        appState.remoteStream = new MediaStream();
-      }
-      const videoEl = document.getElementById('video-remote');
-      if (videoEl.srcObject !== appState.remoteStream) {
-        videoEl.srcObject = appState.remoteStream;
-      }
-      return appState.remoteStream;
-    }
-
-    function refreshRemoteVideoUi() {
-      const videoEl = document.getElementById('video-remote');
-      const placeholder = document.getElementById('remote-video-placeholder');
-      const statusText = document.getElementById('remote-video-status-text');
-      const metaEl = document.getElementById('remote-video-meta');
-
-      const stream = appState.remoteStream;
-      const vTracks = stream ? stream.getVideoTracks().filter(t => t.readyState !== 'ended') : [];
-      const aTracks = stream ? stream.getAudioTracks().filter(t => t.readyState !== 'ended') : [];
-
-      if (vTracks.length > 0) {
-        videoEl.play().catch(() => {});
-        placeholder.classList.add('hidden');
-        metaEl.textContent = `Remote V:${vTracks.length} A:${aTracks.length}`;
-      } else if (aTracks.length > 0) {
-        videoEl.play().catch(() => {});
-        placeholder.classList.remove('hidden');
-        statusText.textContent = 'Remote audio stream active (no remote video track).';
-        metaEl.textContent = `Remote Audio Only (A:${aTracks.length})`;
-      } else {
-        placeholder.classList.remove('hidden');
-        statusText.textContent = 'No remote audio/video track received yet.';
-        metaEl.textContent = 'Waiting for remote tracks...';
-      }
-      updateMediaUiBadges();
-    }
-
-    async function attachLocalTracksToPeerConnection(pc) {
-      if (!pc) return false;
-      const sourceStream = appState.screenStream || appState.localStream;
-      if (!sourceStream) return false;
-
-      const tracksToSend = [];
-      if (appState.screenStream) {
-        tracksToSend.push(...appState.screenStream.getVideoTracks());
-        if (appState.localStream) {
-          tracksToSend.push(...appState.localStream.getAudioTracks());
-        }
-      } else if (appState.localStream) {
-        tracksToSend.push(...appState.localStream.getTracks());
-      }
-
-      let addedAny = false;
-      const existingSenders = pc.getSenders();
-
-      for (const track of tracksToSend) {
-        const sameKindSender = existingSenders.find(s => s.track && s.track.kind === track.kind);
-        if (sameKindSender) {
-          if (sameKindSender.track.id !== track.id) {
-            await sameKindSender.replaceTrack(track);
-            addedAny = true;
-            logEvent(`Replaced ${track.kind} sender track (${track.label || track.id}).`, 'info');
-          }
-        } else {
-          const sender = pc.addTrack(track, sourceStream);
-          appState.mediaSenders.push(sender);
-          addedAny = true;
-          logEvent(`Added local ${track.kind} track to PeerConnection (${track.label || 'default'}).`, 'success');
-        }
-      }
-      updateMediaUiBadges();
-      return addedAny;
-    }
-
-    async function startLocalMedia() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        const msg = 'getUserMedia is not supported in this browser/context (requires HTTPS or localhost).';
-        logEvent(msg, 'error');
-        showToast(msg, 'error');
-        return;
-      }
-
-      // Stop any existing local stream first so we don't leak tracks
-      stopLocalStreamsOnly();
-
-      const attempts = [
-        { label: 'video + audio', constraints: { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: { echoCancellation: true, noiseSuppression: true } } },
-        { label: 'video only', constraints: { video: { facingMode: 'user' }, audio: false } },
-        { label: 'audio only', constraints: { video: false, audio: true } }
-      ];
-
-      let acquiredStream = null;
-      let acquiredMode = null;
-
-      for (const attempt of attempts) {
+      if (state.channel) {
         try {
-          acquiredStream = await navigator.mediaDevices.getUserMedia(attempt.constraints);
-          acquiredMode = attempt.label;
-          break;
+          state.channel.postMessage(message);
+          logEvent('SIGNAL', `Sent "${message.type}" to "${message.toId || 'any'}" via BroadcastChannel.`, 'info');
         } catch (err) {
-          logEvent(`getUserMedia (${attempt.label}) fallback trigger: ${err.name} - ${err.message}`, 'warn');
+          logEvent('SIGNAL', `BroadcastChannel send error: ${err.message}`, 'error');
         }
       }
+    }
 
-      if (!acquiredStream) {
-        const msg = 'Unable to access camera or microphone (permission denied or no media device found).';
-        logEvent(msg, 'error');
-        showToast(msg, 'error');
-        updateMediaUiBadges();
+    function initRendezvousChannel() {
+      if (!('BroadcastChannel' in window)) {
+        logEvent('SIGNAL', 'BroadcastChannel not supported; use Manual Signaling Fallback.', 'warn');
         return;
       }
-
-      appState.localStream = acquiredStream;
-      appState.cameraEnabled = acquiredStream.getVideoTracks().length > 0;
-      appState.micEnabled = acquiredStream.getAudioTracks().length > 0;
-      appState.screenSharing = false;
-
-      acquiredStream.getTracks().forEach(track => {
-        track.onended = () => {
-          logEvent(`Local ${track.kind} track ended (${track.label || track.id}).`, 'warn');
-          syncLocalVideoElement();
+      try {
+        const bc = new BroadcastChannel(CHANNEL_NAME);
+        state.channel = bc;
+        bc.onmessage = (event) => {
+          handleIncomingSignal(event.data).catch(err => {
+            logEvent('SIGNAL', `Error handling incoming signal: ${err.message}`, 'error');
+          });
         };
-      });
-
-      logEvent(`Acquired local media (${acquiredMode}): video=${acquiredStream.getVideoTracks().length}, audio=${acquiredStream.getAudioTracks().length}`, 'success');
-      showToast(`Started local media (${acquiredMode}).`, 'success');
-
-      syncLocalVideoElement();
-
-      if (appState.pc && document.getElementById('chk-auto-attach-media').checked) {
-        await attachLocalTracksToPeerConnection(appState.pc);
-      }
-    }
-
-    function toggleCameraEnabled() {
-      const stream = appState.screenStream || appState.localStream;
-      if (!stream) return;
-      const vTracks = stream.getVideoTracks();
-      if (vTracks.length === 0) return;
-
-      appState.cameraEnabled = !appState.cameraEnabled;
-      vTracks.forEach(t => { t.enabled = appState.cameraEnabled; });
-      logEvent(`Local video ${appState.cameraEnabled ? 'enabled' : 'disabled'}.`, 'info');
-      syncLocalVideoElement();
-    }
-
-    function toggleMicEnabled() {
-      if (!appState.localStream) return;
-      const aTracks = appState.localStream.getAudioTracks();
-      if (aTracks.length === 0) return;
-
-      appState.micEnabled = !appState.micEnabled;
-      aTracks.forEach(t => { t.enabled = appState.micEnabled; });
-      logEvent(`Local microphone ${appState.micEnabled ? 'unmuted' : 'muted'}.`, 'info');
-      updateMediaUiBadges();
-    }
-
-    async function toggleScreenShare() {
-      if (appState.screenSharing) {
-        if (appState.screenStream) {
-          appState.screenStream.getTracks().forEach(t => t.stop());
-          appState.screenStream = null;
-        }
-        appState.screenSharing = false;
-        appState.cameraEnabled = !!(appState.localStream && appState.localStream.getVideoTracks().length > 0);
-        logEvent('Stopped screen sharing.', 'info');
-        syncLocalVideoElement();
-        if (appState.pc && appState.localStream) {
-          await attachLocalTracksToPeerConnection(appState.pc);
-        }
-        return;
-      }
-
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        const msg = 'Screen sharing (getDisplayMedia) is not supported on this browser/device.';
-        logEvent(msg, 'warn');
-        showToast(msg, 'warn');
-        return;
-      }
-
-      try {
-        const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
-        appState.screenStream = displayStream;
-        appState.screenSharing = true;
-        appState.cameraEnabled = true;
-
-        const screenTrack = displayStream.getVideoTracks()[0];
-        if (screenTrack) {
-          screenTrack.onended = async () => {
-            appState.screenStream = null;
-            appState.screenSharing = false;
-            logEvent('Screen share ended by user/browser.', 'info');
-            syncLocalVideoElement();
-            if (appState.pc && appState.localStream) {
-              await attachLocalTracksToPeerConnection(appState.pc);
-            }
-          };
-        }
-
-        logEvent('Started screen share stream.', 'success');
-        showToast('Screen sharing started.', 'success');
-        syncLocalVideoElement();
-
-        if (appState.pc) {
-          await attachLocalTracksToPeerConnection(appState.pc);
-        }
+        logEvent('SIGNAL', `BroadcastChannel "${CHANNEL_NAME}" ready for same-origin tab handshake.`, 'success');
       } catch (err) {
-        logEvent(`Screen share cancelled/failed: ${err.message}`, 'warn');
-        showToast(`Screen share: ${err.message}`, 'warn');
-      }
-    }
-
-    function stopLocalStreamsOnly() {
-      if (appState.localStream) {
-        appState.localStream.getTracks().forEach(t => {
-          try { t.stop(); } catch (_) {}
-        });
-        appState.localStream = null;
-      }
-      if (appState.screenStream) {
-        appState.screenStream.getTracks().forEach(t => {
-          try { t.stop(); } catch (_) {}
-        });
-        appState.screenStream = null;
-      }
-      appState.screenSharing = false;
-      appState.cameraEnabled = false;
-      appState.micEnabled = false;
-    }
-
-    async function stopAllMedia() {
-      stopLocalStreamsOnly();
-
-      if (appState.pc) {
-        const senders = appState.pc.getSenders();
-        for (const sender of senders) {
-          if (sender.track && (sender.track.kind === 'audio' || sender.track.kind === 'video')) {
-            try {
-              await sender.replaceTrack(null);
-            } catch (_) {}
-            try {
-              appState.pc.removeTrack(sender);
-            } catch (_) {}
-          }
-        }
-      }
-      appState.mediaSenders = [];
-      syncLocalVideoElement();
-      logEvent('Stopped local media tracks and cleared PeerConnection media senders.', 'info');
-      showToast('Stopped local media.', 'info');
-    }
-
-    async function createRenegotiationOffer() {
-      try {
-        if (!appState.pc) {
-          throw new Error('No active RTCPeerConnection to renegotiate.');
-        }
-        await attachLocalTracksToPeerConnection(appState.pc);
-        const offer = await appState.pc.createOffer();
-        await appState.pc.setLocalDescription(offer);
-        updateLocalSdpOutput(false);
-        logEvent('Created renegotiation SDP Offer with current media tracks. Paste into Remote Peer & apply as Offer.', 'success');
-        showToast('Renegotiation Offer created! Send to remote peer.', 'success');
-      } catch (err) {
-        logEvent(`Renegotiation failed: ${err.message}`, 'error');
-        showToast(err.message, 'error');
+        logEvent('SIGNAL', `Failed to initialize BroadcastChannel: ${err.message}`, 'warn');
       }
     }
 
     // =========================================================================
-    // 4. STUN SERVER CONFIG & ICE CANDIDATE TABLE
+    // MEDIA STREAMING (CAMERA & MICROPHONE)
     // =========================================================================
-    function renderIceServers() {
-      const listEl = document.getElementById('ice-servers-list');
-      if (!listEl) return;
-      listEl.innerHTML = '';
+    function updateMediaIndicators() {
+      const localVideo = document.getElementById('local-video');
+      const localPlaceholder = document.getElementById('local-video-placeholder');
+      const localStatus = document.getElementById('local-media-status');
+      const localInfo = document.getElementById('local-stream-info');
+      const btnCam = document.getElementById('btn-toggle-cam');
+      const btnMic = document.getElementById('btn-toggle-mic');
 
-      if (appState.iceServers.length === 0) {
-        listEl.innerHTML = `<div class="text-xs text-slate-500 bg-slate-950/70 border border-dashed border-slate-800 rounded-lg p-3 text-center">
-          No STUN servers configured (Host-only LAN direct mode, zero TURN).
-        </div>`;
-        return;
+      const vTracks = state.localStream ? state.localStream.getVideoTracks() : [];
+      const aTracks = state.localStream ? state.localStream.getAudioTracks() : [];
+
+      if (localVideo) {
+        localVideo.srcObject = (state.localStream && vTracks.length > 0 && state.cameraEnabled) ? state.localStream : null;
       }
-
-      appState.iceServers.forEach((srv, idx) => {
-        const row = document.createElement('div');
-        row.className = 'bg-slate-950 border border-slate-800 rounded-lg p-2.5';
-        row.innerHTML = `
-          <div class="flex items-center gap-2">
-            <span class="px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300">STUN</span>
-            <input type="text" data-idx="${idx}" value="${escapeHtml(srv.urls)}" placeholder="stun:stun.l.google.com:19302"
-              class="ice-srv-input flex-1 bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs font-mono text-slate-200 focus:border-indigo-500 focus:outline-none" />
-            <button data-idx="${idx}" type="button" class="btn-remove-ice text-slate-500 hover:text-rose-400 p-1" title="Remove STUN server">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-            </button>
-          </div>
-        `;
-        listEl.appendChild(row);
-      });
-
-      document.querySelectorAll('.ice-srv-input').forEach(input => {
-        input.addEventListener('input', (e) => {
-          const idx = Number(e.target.dataset.idx);
-          const val = e.target.value.trim();
-          if (/^turns?:/i.test(val)) {
-            showToast('TURN servers are disabled in No-TURN Direct P2P mode.', 'warn');
-            e.target.value = appState.iceServers[idx].urls;
-            return;
-          }
-          appState.iceServers[idx].urls = val;
-        });
-      });
-
-      document.querySelectorAll('.btn-remove-ice').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-          const idx = Number(e.currentTarget.dataset.idx);
-          appState.iceServers.splice(idx, 1);
-          renderIceServers();
-        });
-      });
-    }
-
-    function parseIceCandidateString(candidateStr) {
-      if (!candidateStr) return null;
-      const parts = candidateStr.replace(/^candidate:/, '').trim().split(/\s+/);
-      if (parts.length < 8) return { raw: candidateStr, type: 'unknown', address: candidateStr, port: '?', protocol: 'udp' };
-
-      const parsed = {
-        foundation: parts[0],
-        component: parts[1] === '1' ? 'RTP' : 'RTCP',
-        protocol: parts[2].toLowerCase(),
-        priority: Number(parts[3]),
-        address: parts[4],
-        port: parts[5],
-        type: 'unknown',
-        raddr: null,
-        rport: null,
-        tcptype: null,
-        isMdns: parts[4].endsWith('.local'),
-        raw: candidateStr
-      };
-
-      for (let i = 6; i < parts.length; i += 2) {
-        const key = parts[i];
-        const val = parts[i + 1];
-        if (key === 'typ') parsed.type = val;
-        if (key === 'raddr') parsed.raddr = val;
-        if (key === 'rport') parsed.rport = val;
-        if (key === 'tcptype') parsed.tcptype = val;
+      if (localPlaceholder) {
+        const showPlaceholder = !(state.localStream && vTracks.length > 0 && state.cameraEnabled);
+        localPlaceholder.classList.toggle('hidden', !showPlaceholder);
       }
-      return parsed;
-    }
-
-    function describeCandidatePath(c) {
-      if (c.type === 'host') {
-        return c.isMdns ? 'Local LAN (mDNS host)' : 'Direct Local Interface / LAN IP';
-      }
-      if (c.type === 'srflx') return 'Server Reflexive (Public NAT via STUN)';
-      if (c.type === 'prflx') return 'Peer Reflexive (Hole-punch probe)';
-      if (c.type === 'relay') return `TURN Relay (${c.protocol.toUpperCase()})`;
-      return 'Other Candidate';
-    }
-
-    function renderCandidatesTable() {
-      const tbody = document.getElementById('candidates-tbody');
-      const all = [
-        ...appState.localCandidates.map(c => ({ ...c, side: 'LOCAL' })),
-        ...appState.remoteCandidates.map(c => ({ ...c, side: 'REMOTE' }))
-      ];
-
-      document.getElementById('stat-local-count').textContent = appState.localCandidates.length;
-      document.getElementById('stat-remote-count').textContent = appState.remoteCandidates.length;
-
-      const hasMdns = appState.localCandidates.some(c => c.isMdns);
-      const hasRawHostIp = appState.localCandidates.some(c => c.type === 'host' && !c.isMdns);
-      const leakEl = document.getElementById('host-leak-status');
-      if (hasMdns && !hasRawHostIp) {
-        leakEl.textContent = 'Host IPs obfuscated via mDNS (.local)';
-        leakEl.className = 'font-mono text-emerald-400';
-      } else if (hasRawHostIp) {
-        leakEl.textContent = 'Direct Local LAN IP gathered';
-        leakEl.className = 'font-mono text-sky-400';
-      }
-
-      if (all.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-slate-500 font-sans">No ICE candidates gathered yet.</td></tr>`;
-        return;
-      }
-
-      const badges = {
-        host: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
-        srflx: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
-        prflx: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
-        relay: 'bg-purple-500/15 text-purple-300 border-purple-500/30'
-      };
-
-      tbody.innerHTML = all.map(c => `
-        <tr class="hover:bg-slate-800/40 transition">
-          <td class="py-2 px-3 font-semibold ${c.side === 'LOCAL' ? 'text-indigo-400' : 'text-emerald-400'}">${c.side}</td>
-          <td class="py-2 px-3"><span class="px-2 py-0.5 rounded border text-[11px] font-semibold ${badges[c.type] || 'bg-slate-800 text-slate-300 border-slate-700'}">${escapeHtml(c.type)}</span></td>
-          <td class="py-2 px-3 uppercase text-slate-300">${escapeHtml(c.protocol)}${c.tcptype ? ` (${escapeHtml(c.tcptype)})` : ''}</td>
-          <td class="py-2 px-3 text-slate-200 max-w-[200px] truncate" title="${escapeHtml(c.address)}">${escapeHtml(c.address)}</td>
-          <td class="py-2 px-3 text-slate-300">${escapeHtml(c.port)}</td>
-          <td class="py-2 px-3 text-slate-400">${c.raddr ? `${escapeHtml(c.raddr)}:${escapeHtml(c.rport)}` : '—'}</td>
-          <td class="py-2 px-3 text-slate-500">${c.priority || '—'}</td>
-          <td class="py-2 px-3 font-sans text-slate-300">${escapeHtml(describeCandidatePath(c))}</td>
-        </tr>
-      `).join('');
-    }
-
-    // =========================================================================
-    // 5. KEEPALIVE HEARTBEAT & DATACHANNEL HELPERS
-    // =========================================================================
-    function updateKeepaliveUi() {
-      const { sent, acksReceived, lastRttMs, lastRemotePacketAt } = appState.keepaliveStats;
-      document.getElementById('ka-counters').textContent = `${sent} / ${acksReceived}`;
-      document.getElementById('ka-rtt').textContent = lastRttMs != null ? `${Number(lastRttMs).toFixed(1)} ms` : '— ms';
-
-      const silenceEl = document.getElementById('ka-silence');
-      if (!lastRemotePacketAt) {
-        silenceEl.textContent = 'waiting';
-        silenceEl.className = 'text-slate-400 font-semibold';
-      } else {
-        const ageSec = (performance.now() - lastRemotePacketAt) / 1000;
-        silenceEl.textContent = `${ageSec.toFixed(1)}s ago`;
-        if (ageSec > 15) {
-          silenceEl.className = 'text-rose-400 font-semibold';
-        } else if (ageSec > 7) {
-          silenceEl.className = 'text-amber-400 font-semibold';
+      if (localStatus) {
+        if (!state.localStream) {
+          localStatus.textContent = 'idle';
+          localStatus.className = 'font-mono text-slate-400';
         } else {
-          silenceEl.className = 'text-emerald-400 font-semibold';
+          localStatus.textContent = `cam:${state.cameraEnabled && vTracks.length ? 'on' : 'off'} • mic:${state.micEnabled && aTracks.length ? 'on' : 'off'}`;
+          localStatus.className = 'font-mono text-emerald-400';
         }
       }
+      if (localInfo) {
+        localInfo.textContent = state.localStream
+          ? `Video: ${vTracks.length} | Audio: ${aTracks.length}`
+          : 'No tracks';
+      }
+
+      if (btnCam) {
+        btnCam.textContent = state.cameraEnabled ? 'Camera: ON' : 'Camera: OFF';
+        btnCam.className = state.cameraEnabled
+          ? 'bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition'
+          : 'bg-amber-950 hover:bg-amber-900 text-amber-200 border border-amber-700/60 px-3 py-1.5 rounded-lg text-xs font-medium transition';
+      }
+      if (btnMic) {
+        btnMic.textContent = state.micEnabled ? 'Mic: ON' : 'Mic: MUTED';
+        btnMic.className = state.micEnabled
+          ? 'bg-slate-800 hover:bg-slate-700 text-slate-100 border border-slate-700 px-3 py-1.5 rounded-lg text-xs font-medium transition'
+          : 'bg-rose-950 hover:bg-rose-900 text-rose-200 border border-rose-700/60 px-3 py-1.5 rounded-lg text-xs font-medium transition';
+      }
+
+      const remoteVideo = document.getElementById('remote-video');
+      const remotePlaceholder = document.getElementById('remote-video-placeholder');
+      const remoteStatus = document.getElementById('remote-media-status');
+      const remoteInfo = document.getElementById('remote-stream-info');
+      const remotePeerLabel = document.getElementById('remote-peer-label');
+
+      const rVideo = state.remoteStream ? state.remoteStream.getVideoTracks().filter(t => t.readyState !== 'ended') : [];
+      const rAudio = state.remoteStream ? state.remoteStream.getAudioTracks().filter(t => t.readyState !== 'ended') : [];
+
+      if (remoteVideo && state.remoteStream && rVideo.length > 0) {
+        if (remoteVideo.srcObject !== state.remoteStream) {
+          remoteVideo.srcObject = state.remoteStream;
+        }
+        remoteVideo.play().catch(() => {});
+        if (remotePlaceholder) remotePlaceholder.classList.add('hidden');
+      } else {
+        if (remotePlaceholder) remotePlaceholder.classList.remove('hidden');
+      }
+
+      if (remoteStatus) {
+        if (rVideo.length > 0 || rAudio.length > 0) {
+          remoteStatus.textContent = 'streaming';
+          remoteStatus.className = 'font-mono text-emerald-400';
+        } else {
+          remoteStatus.textContent = 'waiting for peer';
+          remoteStatus.className = 'font-mono text-slate-400';
+        }
+      }
+      if (remoteInfo) {
+        remoteInfo.textContent = state.remoteStream
+          ? `Video: ${rVideo.length} | Audio: ${rAudio.length}`
+          : 'No remote tracks';
+      }
+      if (remotePeerLabel) {
+        remotePeerLabel.textContent = `Peer: ${state.connectedPeerId || state.targetPeerId || 'none'}`;
+      }
     }
 
-    function stopKeepaliveEngine() {
-      if (appState.keepaliveTimer !== null && appState.keepaliveTimer !== undefined) {
-        clearInterval(appState.keepaliveTimer);
-        appState.keepaliveTimer = null;
+    async function ensureLocalMedia() {
+      if (state.localStream) {
+        return state.localStream;
       }
-      if (appState.silenceMonitorTimer !== null && appState.silenceMonitorTimer !== undefined) {
-        clearInterval(appState.silenceMonitorTimer);
-        appState.silenceMonitorTimer = null;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('getUserMedia is unavailable in this browser or context (HTTPS or localhost required).');
       }
-    }
 
-    function sendKeepaliveHeartbeat() {
-      const dc = appState.dc;
-      if (!dc || dc.readyState !== 'open') return;
-      if (!document.getElementById('chk-auto-keepalive').checked) return;
-
-      appState.keepaliveSeq += 1;
-      const payload = JSON.stringify({
-        type: 'keepalive',
-        seq: appState.keepaliveSeq,
-        ts: performance.now(),
-        wallTs: Date.now()
-      });
-
+      logEvent('MEDIA', 'Requesting camera and microphone access...', 'info');
       try {
-        dc.send(payload);
-        appState.keepaliveStats.sent += 1;
-        updateKeepaliveUi();
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: { echoCancellation: true, noiseSuppression: true }
+        });
+        state.localStream = stream;
+        state.cameraEnabled = stream.getVideoTracks().length > 0;
+        state.micEnabled = stream.getAudioTracks().length > 0;
+        logEvent('MEDIA', `Acquired local stream (video=${stream.getVideoTracks().length}, audio=${stream.getAudioTracks().length}).`, 'success');
+        updateMediaIndicators();
+        return stream;
       } catch (err) {
-        logEvent(`Keepalive send failed: ${err.message}`, 'error');
+        // Fallback to audio-only if camera is busy or missing
+        logEvent('MEDIA', `Video+audio failed (${err.name}): trying audio-only fallback...`, 'warn');
+        const audioOnly = await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
+        state.localStream = audioOnly;
+        state.cameraEnabled = false;
+        state.micEnabled = audioOnly.getAudioTracks().length > 0;
+        logEvent('MEDIA', 'Acquired audio-only stream (no camera track).', 'warn');
+        updateMediaIndicators();
+        return audioOnly;
       }
     }
 
-    function startKeepaliveEngine() {
-      stopKeepaliveEngine();
-      const intervalMs = Number(document.getElementById('sel-keepalive-interval').value) || 5000;
-      sendKeepaliveHeartbeat();
-      appState.keepaliveTimer = setInterval(sendKeepaliveHeartbeat, intervalMs);
-      appState.silenceMonitorTimer = setInterval(updateKeepaliveUi, 500);
-      logEvent(`Auto-Keepalive Heartbeat active (interval=${intervalMs / 1000}s, No-TURN NAT keepalive).`, 'info');
+    function toggleCamera() {
+      if (!state.localStream) {
+        showToast('Start a video call first to toggle camera.', 'info');
+        return;
+      }
+      const tracks = state.localStream.getVideoTracks();
+      if (tracks.length === 0) {
+        showToast('No local camera track available.', 'warn');
+        return;
+      }
+      state.cameraEnabled = !state.cameraEnabled;
+      tracks.forEach(t => { t.enabled = state.cameraEnabled; });
+      logEvent('MEDIA', `Camera ${state.cameraEnabled ? 'enabled' : 'disabled'}.`, 'info');
+      updateMediaIndicators();
     }
 
-    function appendDcMessage(sender, text, colorClass = 'text-slate-200') {
-      const box = document.getElementById('dc-messages');
+    function toggleMic() {
+      if (!state.localStream) {
+        showToast('Start a video call first to toggle microphone.', 'info');
+        return;
+      }
+      const tracks = state.localStream.getAudioTracks();
+      if (tracks.length === 0) {
+        showToast('No local microphone track available.', 'warn');
+        return;
+      }
+      state.micEnabled = !state.micEnabled;
+      tracks.forEach(t => { t.enabled = state.micEnabled; });
+      logEvent('MEDIA', `Microphone ${state.micEnabled ? 'unmuted' : 'muted'}.`, 'info');
+      updateMediaIndicators();
+    }
+
+    // =========================================================================
+    // DATACHANNEL TEXT CHAT
+    // =========================================================================
+    function appendChatBubble(sender, text, isSelf = false) {
+      const box = document.getElementById('chat-messages');
       if (!box) return;
       if (box.firstElementChild && box.firstElementChild.classList.contains('italic')) {
         box.innerHTML = '';
       }
-      const line = document.createElement('div');
-      line.innerHTML = `<span class="text-slate-500">[${escapeHtml(sender)}]</span> <span class="${colorClass}">${escapeHtml(text)}</span>`;
-      box.appendChild(line);
+      const item = document.createElement('div');
+      item.className = `p-2 rounded-lg max-w-[90%] ${
+        isSelf
+          ? 'ml-auto bg-indigo-600/25 border border-indigo-500/30 text-indigo-100'
+          : 'bg-slate-900 border border-slate-800 text-slate-200'
+      }`;
+      item.innerHTML = `<div class="text-[10px] font-semibold mb-0.5 ${isSelf ? 'text-indigo-300' : 'text-emerald-300'}">${escapeHtml(sender)}</div><div class="font-sans text-xs break-words">${escapeHtml(text)}</div>`;
+      box.appendChild(item);
       box.scrollTop = box.scrollHeight;
     }
 
-    function bindDataChannel(dc) {
-      appState.dc = dc;
-      const badge = document.getElementById('dc-state-badge');
-      const input = document.getElementById('dc-input');
-      const btnSend = document.getElementById('btn-dc-send');
-      const btnPing = document.getElementById('btn-dc-ping');
-      const btnBurst = document.getElementById('btn-dc-burst');
-
-      const setEnabled = (en) => {
-        input.disabled = !en;
-        btnSend.disabled = !en;
-        btnPing.disabled = !en;
-        btnBurst.disabled = !en;
-      };
+    function attachDataChannel(dc) {
+      state.dc = dc;
+      updateStateBadges();
 
       dc.onopen = () => {
-        badge.textContent = 'DC: OPEN';
-        badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
-        setEnabled(true);
-        appState.keepaliveStats.lastRemotePacketAt = performance.now();
-        updateKeepaliveUi();
-        appendDcMessage('System', 'DataChannel OPEN! Keepalive heartbeat started.', 'text-emerald-400');
-        logEvent('DataChannel opened.', 'success');
-        startKeepaliveEngine();
+        logEvent('DATACHANNEL', `DataChannel "${dc.label}" opened.`, 'success');
+        updateStateBadges();
+        appendChatBubble('System', 'DataChannel connected. You can send text messages now.', false);
       };
 
       dc.onclose = () => {
-        stopKeepaliveEngine();
-        badge.textContent = 'DC: CLOSED';
-        badge.className = 'px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400';
-        setEnabled(false);
-        logEvent('DataChannel closed.', 'warn');
+        logEvent('DATACHANNEL', `DataChannel "${dc.label}" closed.`, 'warn');
+        updateStateBadges();
+      };
+
+      dc.onerror = (err) => {
+        logEvent('DATACHANNEL', `DataChannel error: ${err?.message || 'unknown error'}`, 'error');
       };
 
       dc.onmessage = (event) => {
-        const data = event.data;
-        appState.keepaliveStats.lastRemotePacketAt = performance.now();
-        updateKeepaliveUi();
-
-        if (typeof data === 'string' && data.startsWith('{')) {
-          try {
-            const msg = JSON.parse(data);
-            if (msg.type === 'keepalive') {
-              dc.send(JSON.stringify({
-                type: 'keepalive-ack',
-                seq: msg.seq,
-                echoTs: msg.ts,
-                responderWallTs: Date.now()
-              }));
-              return;
-            }
-            if (msg.type === 'keepalive-ack') {
-              const rtt = Math.max(0, performance.now() - Number(msg.echoTs));
-              appState.keepaliveStats.acksReceived += 1;
-              appState.keepaliveStats.lastRttMs = rtt;
-              appState.keepaliveStats.lastPongAt = new Date().toISOString();
-              updateKeepaliveUi();
-              return;
-            }
-          } catch (_) {
-            // Treat as normal text if not valid keepalive JSON
-          }
-        }
-
-        if (typeof data === 'string' && data.startsWith('__PING__:')) {
-          dc.send(`__PONG__:${data.split(':')[1]}`);
-          return;
-        }
-        if (typeof data === 'string' && data.startsWith('__PONG__:')) {
-          const sentTs = Number(data.split(':')[1]);
-          const rtt = (performance.now() - sentTs).toFixed(2);
-          appendDcMessage('Ping', `Manual PONG received! RTT = ${rtt} ms`, 'text-sky-400');
-          logEvent(`Manual Ping RTT: ${rtt} ms`, 'success');
-          return;
-        }
-        if (typeof data === 'string' && data.startsWith('__BURST__:')) {
-          appendDcMessage('Remote', `Received 64KB burst (${data.length} bytes)`, 'text-purple-300');
-          return;
-        }
-        appendDcMessage('Remote Peer', String(data), 'text-emerald-300');
+        const msgText = String(event.data);
+        logEvent('DATACHANNEL', `Received message (${msgText.length} chars).`, 'info');
+        appendChatBubble(state.connectedPeerId || 'Remote Peer', msgText, false);
       };
     }
 
     // =========================================================================
-    // 6. PEERCONNECTION LIFECYCLE, RESET & SIGNALING
+    // WEBRTC PEERCONNECTION & STUN SIGNALING
     // =========================================================================
-    function buildRtcConfiguration() {
-      const stunOnlyServers = appState.iceServers
-        .filter(s => s.urls && /^stun:/i.test(s.urls.trim()))
-        .map(s => ({ urls: s.urls.trim() }));
+    function createPeerConnection(peerId, isInitiator) {
+      cleanupPeerOnly();
+      state.connectedPeerId = peerId || '';
+      state.isInitiator = isInitiator;
+      state.localCandidates = [];
+      state.remoteCandidateQueue = [];
+      state.remoteDescriptionSet = false;
+      state.remoteStream = new MediaStream();
 
-      return {
-        iceServers: stunOnlyServers,
-        iceTransportPolicy: 'all',
-        bundlePolicy: document.getElementById('cfg-bundle-policy').value,
-        rtcpMuxPolicy: 'require'
-      };
-    }
+      const pc = new RTCPeerConnection(RTC_CONFIG);
+      state.pc = pc;
+      updateStateBadges();
+      updateMediaIndicators();
 
-    function updateStateBadges() {
-      const pc = appState.pc;
-      const setB = (id, val) => {
-        const el = document.getElementById(id);
-        el.textContent = val;
-        el.className = 'font-semibold ' + (
-          ['connected', 'completed', 'stable'].includes(val) ? 'text-emerald-400' :
-          ['checking', 'gathering', 'have-local-offer', 'have-remote-offer'].includes(val) ? 'text-amber-400' :
-          ['failed', 'disconnected', 'closed'].includes(val) ? 'text-rose-400' : 'text-slate-300'
-        );
-      };
+      const stunUrls = RTC_CONFIG.iceServers.map(s => s.urls).join(', ');
+      logEvent('STUN', `Created RTCPeerConnection (no TURN) using STUN: ${stunUrls}`, 'info');
 
-      if (!pc) {
-        setB('badge-signaling', 'idle');
-        setB('badge-gathering', 'new');
-        setB('badge-ice', 'new');
-        setB('badge-conn', 'new');
-        return;
-      }
-
-      setB('badge-signaling', pc.signalingState);
-      setB('badge-gathering', pc.iceGatheringState);
-      setB('badge-ice', pc.iceConnectionState);
-      setB('badge-conn', pc.connectionState);
-    }
-
-    function resetSession(resetTextBoxes = true) {
-      stopStatsPolling();
-      stopKeepaliveEngine();
-
-      if (appState.dc) {
-        try { appState.dc.close(); } catch (_) {}
-        appState.dc = null;
-      }
-      if (appState.pc) {
-        try { appState.pc.close(); } catch (_) {}
-        appState.pc = null;
-      }
-
-      if (appState.remoteStream) {
-        appState.remoteStream.getTracks().forEach(t => {
-          try { t.stop(); } catch (_) {}
+      if (state.localStream) {
+        state.localStream.getTracks().forEach(track => {
+          pc.addTrack(track, state.localStream);
+          logEvent('MEDIA', `Attached local ${track.kind} track to PeerConnection.`, 'info');
         });
-        appState.remoteStream = null;
-      }
-      const remoteVideo = document.getElementById('video-remote');
-      if (remoteVideo) remoteVideo.srcObject = null;
-
-      appState.role = null;
-      appState.localCandidates = [];
-      appState.remoteCandidates = [];
-      appState.mediaSenders = [];
-      appState.activePairSummary = null;
-      appState.keepaliveSeq = 0;
-      appState.keepaliveStats = {
-        sent: 0,
-        acksReceived: 0,
-        lastRttMs: null,
-        lastPongAt: null,
-        lastRemotePacketAt: null
-      };
-
-      updateKeepaliveUi();
-      updateStateBadges();
-      renderCandidatesTable();
-      refreshRemoteVideoUi();
-      updateMediaUiBadges();
-
-      const dcBadge = document.getElementById('dc-state-badge');
-      dcBadge.textContent = 'DC: closed';
-      dcBadge.className = 'px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400';
-      document.getElementById('dc-input').disabled = true;
-      document.getElementById('btn-dc-send').disabled = true;
-      document.getElementById('btn-dc-ping').disabled = true;
-      document.getElementById('btn-dc-burst').disabled = true;
-
-      if (resetTextBoxes) {
-        document.getElementById('txt-local-sdp').value = '';
-        document.getElementById('txt-remote-sdp').value = '';
-        document.getElementById('local-sdp-status').textContent = 'empty';
-        document.getElementById('local-sdp-status').className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400';
-        document.getElementById('active-path-badge').textContent = 'NOT CONNECTED';
-        document.getElementById('active-path-badge').className = 'px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-slate-800 text-slate-400 border border-slate-700';
-        document.getElementById('vis-local-type').textContent = '—';
-        document.getElementById('vis-local-addr').textContent = 'Waiting for ICE...';
-        document.getElementById('vis-local-proto').textContent = '—';
-        document.getElementById('vis-remote-type').textContent = '—';
-        document.getElementById('vis-remote-addr').textContent = 'Waiting for Peer...';
-        document.getElementById('vis-remote-proto').textContent = '—';
-        document.getElementById('vis-tunnel-label').textContent = 'Awaiting Handshake';
-        document.getElementById('vis-tunnel-label').className = 'text-[11px] font-mono font-semibold text-slate-400 mb-1.5';
-        document.getElementById('vis-tunnel-pill').textContent = 'RTT: — ms';
-        document.getElementById('vis-tunnel-pill').className = 'px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-[11px] font-mono text-slate-300';
-        document.getElementById('vis-pair-state').textContent = 'state: idle';
-        document.getElementById('vis-line-left').className = 'h-0.5 flex-1 bg-slate-800';
-        document.getElementById('vis-line-right').className = 'h-0.5 flex-1 bg-slate-800';
-        document.getElementById('stat-rtt').textContent = '— ms';
-        document.getElementById('stat-bytes').textContent = '0 B / 0 B';
-        logEvent('Session reset cleanly. Ready for a fresh Offer/Answer cycle.', 'success');
-        showToast('Session reset cleanly.', 'info');
-      }
-    }
-
-    function setupPeerConnection(role) {
-      resetSession(false);
-      appState.role = role;
-      const config = buildRtcConfiguration();
-      logEvent(`Initializing RTCPeerConnection [${role.toUpperCase()}] | transportPolicy=${config.iceTransportPolicy} | STUN servers=${config.iceServers.length}`, 'info');
-
-      const pc = new RTCPeerConnection(config);
-      appState.pc = pc;
-      updateStateBadges();
-
-      if (document.getElementById('chk-synthetic-media').checked) {
-        try {
-          const AudioCtx = window.AudioContext || window.webkitAudioContext;
-          const ctx = new AudioCtx();
-          const dst = ctx.createMediaStreamDestination();
-          const track = dst.stream.getAudioTracks()[0];
-          pc.addTrack(track, dst.stream);
-          logEvent('Attached synthetic silent audio track.', 'info');
-        } catch (err) {
-          logEvent(`Synthetic audio track skipped: ${err.message}`, 'warn');
-        }
       }
 
-      if (role === 'caller' && document.getElementById('chk-datachannel').checked) {
-        const dc = pc.createDataChannel('p2p-diag', { ordered: true });
-        bindDataChannel(dc);
+      if (isInitiator) {
+        const dc = pc.createDataChannel('chat', { ordered: true });
+        attachDataChannel(dc);
       }
 
       pc.ondatachannel = (event) => {
-        logEvent(`Received remote DataChannel "${event.channel.label}".`, 'success');
-        bindDataChannel(event.channel);
+        logEvent('DATACHANNEL', `Received remote DataChannel "${event.channel.label}".`, 'success');
+        attachDataChannel(event.channel);
       };
 
       pc.ontrack = (event) => {
         const track = event.track;
-        const stream = ensureRemoteStream();
-        if (!stream.getTracks().some(t => t.id === track.id)) {
-          stream.addTrack(track);
+        if (!state.remoteStream) state.remoteStream = new MediaStream();
+        if (!state.remoteStream.getTracks().some(t => t.id === track.id)) {
+          state.remoteStream.addTrack(track);
         }
-        if (Array.isArray(event.streams) && event.streams[0]) {
+        if (event.streams && event.streams[0]) {
           event.streams[0].getTracks().forEach(t => {
-            if (!stream.getTracks().some(existing => existing.id === t.id)) {
-              stream.addTrack(t);
+            if (!state.remoteStream.getTracks().some(existing => existing.id === t.id)) {
+              state.remoteStream.addTrack(t);
             }
           });
         }
-        logEvent(`Received REMOTE ${track.kind} track (${track.label || track.id}).`, 'success');
-        track.onmute = () => {
-          logEvent(`Remote ${track.kind} track muted.`, 'warn');
-          refreshRemoteVideoUi();
-        };
-        track.onunmute = () => {
-          logEvent(`Remote ${track.kind} track unmuted.`, 'info');
-          refreshRemoteVideoUi();
-        };
-        track.onended = () => {
-          logEvent(`Remote ${track.kind} track ended.`, 'warn');
-          refreshRemoteVideoUi();
-        };
-        refreshRemoteVideoUi();
+        logEvent('MEDIA', `Received remote ${track.kind} track (${track.label || track.id}).`, 'success');
+        updateMediaIndicators();
       };
 
       pc.onicecandidate = (event) => {
         if (event.candidate) {
-          const parsed = parseIceCandidateString(event.candidate.candidate);
-          if (parsed) {
-            appState.localCandidates.push(parsed);
-            renderCandidatesTable();
-            logEvent(`Gathered LOCAL [${parsed.type}] ${parsed.protocol.toUpperCase()} ${parsed.address}:${parsed.port}`, 'ice');
-          }
-          updateLocalSdpOutput(false);
+          state.localCandidates.push(event.candidate.toJSON());
+          const candStr = event.candidate.candidate || '';
+          const typeMatch = candStr.match(/\btyp\s+(\w+)/);
+          const candType = typeMatch ? typeMatch[1] : 'unknown';
+          logEvent('ICE', `Gathered local candidate [typ=${candType}]`, 'ice');
+
+          sendSignalingMessage({
+            type: 'ice-candidate',
+            toId: state.connectedPeerId,
+            candidate: event.candidate.toJSON()
+          });
         } else {
-          logEvent('ICE candidate gathering completed.', 'success');
-          updateLocalSdpOutput(true);
+          logEvent('ICE', `Local ICE gathering complete (${state.localCandidates.length} candidates).`, 'success');
+          if (pc.localDescription) {
+            sendSignalingMessage({
+              type: 'ice-complete',
+              toId: state.connectedPeerId,
+              sdp: pc.localDescription
+            });
+          }
         }
       };
 
       pc.onicecandidateerror = (event) => {
-        logEvent(`ICE Candidate Error (${event.errorCode}): ${event.errorText || 'Timeout/unreachable'} [${event.url || 'stun'}]`, 'warn');
-      };
-
-      pc.onicegatheringstatechange = () => {
-        updateStateBadges();
-        logEvent(`iceGatheringState -> ${pc.iceGatheringState}`, 'info');
+        logEvent('STUN', `ICE candidate error (${event.errorCode}): ${event.errorText || 'STUN timeout/unreachable'} [${event.url || 'stun'}]`, 'warn');
       };
 
       pc.oniceconnectionstatechange = () => {
+        logEvent('ICE', `iceConnectionState -> ${pc.iceConnectionState}`, pc.iceConnectionState === 'failed' ? 'error' : 'info');
         updateStateBadges();
-        const st = pc.iceConnectionState;
-        logEvent(`iceConnectionState -> ${st}`, (st === 'failed' || st === 'disconnected') ? 'error' : 'info');
-        if (st === 'connected' || st === 'completed') {
-          inspectActiveStats();
-        }
       };
 
       pc.onconnectionstatechange = () => {
-        updateStateBadges();
         const st = pc.connectionState;
-        logEvent(`connectionState -> ${st}`, st === 'connected' ? 'success' : (st === 'failed' || st === 'disconnected' ? 'error' : 'info'));
+        const lvl = st === 'connected' ? 'success' : (st === 'failed' || st === 'disconnected' ? 'error' : 'info');
+        logEvent('PEER', `connectionState -> ${st}`, lvl);
+        updateStateBadges();
         if (st === 'connected') {
-          showToast('Direct P2P connection established!', 'success');
-          startStatsPolling();
-        } else if (st === 'failed' || st === 'closed') {
-          stopStatsPolling();
-          stopKeepaliveEngine();
+          showToast('Video chat connected!', 'success');
+        } else if (st === 'failed') {
+          showToast('Direct STUN connection failed. Check network/NAT.', 'error');
         }
       };
 
       pc.onsignalingstatechange = () => {
+        logEvent('SIGNAL', `signalingState -> ${pc.signalingState}`, 'info');
         updateStateBadges();
       };
 
       return pc;
     }
 
-    function updateLocalSdpOutput(gatheringComplete = false) {
-      const pc = appState.pc;
-      if (!pc || !pc.localDescription) return;
-
-      const mode = document.getElementById('cfg-signaling-mode').value;
-      const statusEl = document.getElementById('local-sdp-status');
-
-      if (mode === 'vanilla' && !gatheringComplete && pc.iceGatheringState !== 'complete') {
-        statusEl.textContent = `gathering ICE (${appState.localCandidates.length})...`;
-        statusEl.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300';
-      } else {
-        statusEl.textContent = gatheringComplete ? 'ready (complete)' : 'trickle ready';
-        statusEl.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300';
-      }
-
-      const payload = {
-        version: 1,
-        role: appState.role,
-        sdp: pc.localDescription,
-        candidates: appState.localCandidates.map(c => ({
-          candidate: c.raw,
-          sdpMid: '0',
-          sdpMLineIndex: 0
-        }))
-      };
-      document.getElementById('txt-local-sdp').value = JSON.stringify(payload, null, 2);
-    }
-
-    function parseRemoteBundle(rawText) {
-      const trimmed = (rawText || '').trim();
-      if (!trimmed) throw new Error('Remote SDP input is empty.');
-
-      // Support optional compact ID-Code format: P2PID1:<base64url-json>
-      let normalized = trimmed;
-      if (trimmed.startsWith('P2PID1:')) {
-        const b64 = trimmed.slice('P2PID1:'.length).replace(/-/g, '+').replace(/_/g, '/');
-        const pad = b64.length % 4 === 0 ? '' : '='.repeat(4 - (b64.length % 4));
-        const decodedJson = decodeURIComponent(escape(atob(b64 + pad)));
-        const envelope = JSON.parse(decodedJson);
-        if (envelope.fromId && !document.getElementById('input-remote-peer-id').value.trim()) {
-          document.getElementById('input-remote-peer-id').value = envelope.fromId;
-          appState.remotePeerId = envelope.fromId;
-        }
-        normalized = JSON.stringify(envelope.bundle || envelope);
-      }
-
-      if (normalized.startsWith('{')) {
-        const obj = JSON.parse(normalized);
-        if (!obj.sdp || !obj.sdp.type || !obj.sdp.sdp) {
-          throw new Error('JSON bundle is missing valid "sdp.type" or "sdp.sdp".');
-        }
-        return obj;
-      }
-
-      const type = normalized.includes('a=setup:active') ? 'answer' : 'offer';
-      return { sdp: { type, sdp: normalized }, candidates: [] };
-    }
-
-    function generateShortPeerId() {
-      const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
-      let suffix = '';
-      for (let i = 0; i < 4; i += 1) {
-        suffix += chars[Math.floor(Math.random() * chars.length)];
-      }
-      return `p-${suffix}`;
-    }
-
-    function getLocalBundleObject() {
-      const raw = document.getElementById('txt-local-sdp')?.value || '';
-      if (!raw.trim()) return null;
-      return JSON.parse(raw);
-    }
-
-    function buildCompactIdCode() {
-      const bundle = getLocalBundleObject();
-      if (!bundle) return '';
-      const fromId = (document.getElementById('input-local-peer-id')?.value || appState.localPeerId || '').trim();
-      const toId = (document.getElementById('input-remote-peer-id')?.value || appState.remotePeerId || '').trim();
-      const envelope = { v: 1, fromId, toId, bundle };
-      const utf8Bytes = unescape(encodeURIComponent(JSON.stringify(envelope)));
-      const b64url = btoa(utf8Bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-      return `P2PID1:${b64url}`;
-    }
-
-    function publishBundleToRendezvous(kind) {
-      const bundle = getLocalBundleObject();
-      if (!bundle) return;
-      const fromId = (document.getElementById('input-local-peer-id')?.value || appState.localPeerId || '').trim();
-      const toId = (document.getElementById('input-remote-peer-id')?.value || appState.remotePeerId || '').trim();
-      appState.localPeerId = fromId;
-      appState.remotePeerId = toId;
-
-      const record = {
-        kind,
-        fromId,
-        toId,
-        bundle,
-        updatedAt: new Date().toISOString()
-      };
-
-      if (fromId) {
-        appState.idDirectory[fromId] = record;
-      }
-
-      if (appState.broadcastChannel) {
+    async function flushQueuedRemoteCandidates() {
+      if (!state.pc || !state.remoteDescriptionSet) return;
+      while (state.remoteCandidateQueue.length > 0) {
+        const cand = state.remoteCandidateQueue.shift();
         try {
-          appState.broadcastChannel.postMessage({ type: 'signal-record', record });
-          logEvent(`Published ${kind} under Peer ID "${fromId || 'anon'}"${toId ? ` -> "${toId}"` : ''} via BroadcastChannel.`, 'info');
+          await state.pc.addIceCandidate(new RTCIceCandidate(cand));
+          logEvent('ICE', 'Added queued remote ICE candidate.', 'ice');
         } catch (err) {
-          logEvent(`BroadcastChannel publish error: ${err.message}`, 'warn');
+          logEvent('ICE', `Failed adding queued ICE candidate: ${err.message}`, 'warn');
         }
       }
     }
 
-    function lookupRemoteRecordById(targetId) {
-      const cleanId = (targetId || '').trim();
-      if (!cleanId) return null;
-      return appState.idDirectory[cleanId] || null;
-    }
-
-    function initIdRendezvous() {
-      const localInput = document.getElementById('input-local-peer-id');
-      const remoteInput = document.getElementById('input-remote-peer-id');
-      const statusEl = document.getElementById('id-rendezvous-status');
-
-      if (!appState.localPeerId) {
-        appState.localPeerId = generateShortPeerId();
+    async function startVideoChat() {
+      const peerInput = document.getElementById('peer-id-input');
+      const targetId = (peerInput ? peerInput.value : '').trim();
+      if (!targetId) {
+        showToast('Please enter a Peer ID first.', 'warn');
+        logEvent('CALL', 'Start Video Chat blocked: Peer ID input is empty.', 'warn');
+        return;
       }
-      if (localInput && !localInput.value) {
-        localInput.value = appState.localPeerId;
+      if (targetId === state.myId) {
+        showToast('Enter the remote peer’s ID (not your own ID).', 'warn');
+        return;
       }
 
-      if (localInput) {
-        localInput.addEventListener('input', () => {
-          appState.localPeerId = localInput.value.trim();
-        });
-      }
-      if (remoteInput) {
-        remoteInput.addEventListener('input', () => {
-          appState.remotePeerId = remoteInput.value.trim();
-        });
-      }
+      state.targetPeerId = targetId;
 
-      if ('BroadcastChannel' in window) {
-        try {
-          const bc = new BroadcastChannel(RENDEZVOUS_CHANNEL_NAME);
-          appState.broadcastChannel = bc;
-          bc.onmessage = (event) => {
-            const msg = event.data;
-            if (!msg || msg.type !== 'signal-record' || !msg.record) return;
-            const rec = msg.record;
-            if (rec.fromId) {
-              appState.idDirectory[rec.fromId] = rec;
-            }
-            const myId = (localInput?.value || appState.localPeerId || '').trim();
-            const isTargetedToMe = !rec.toId || rec.toId === myId;
-            if (rec.fromId && rec.fromId !== myId && isTargetedToMe) {
-              if (remoteInput && !remoteInput.value.trim()) {
-                remoteInput.value = rec.fromId;
-                appState.remotePeerId = rec.fromId;
-              }
-              document.getElementById('txt-remote-sdp').value = JSON.stringify(rec.bundle, null, 2);
-              logEvent(`Received ${rec.kind} from Peer ID "${rec.fromId}" via local BroadcastChannel rendezvous.`, 'success');
-              showToast(`Signal received from ID "${rec.fromId}"!`, 'success');
-            }
-          };
-          if (statusEl) {
-            statusEl.textContent = `Rendezvous: BroadcastChannel ("${RENDEZVOUS_CHANNEL_NAME}") active`;
-          }
-        } catch (_) {
-          if (statusEl) {
-            statusEl.textContent = 'Rendezvous: In-memory ID Map + Compact ID-Code / #Hash ready';
-          }
-        }
-      }
-
-      // Check if opened with a #p2p= compact ID-Code fragment
-      const hash = window.location.hash || '';
-      const p2pPrefix = '#p2p=';
-      if (hash.startsWith(p2pPrefix)) {
-        try {
-          const code = decodeURIComponent(hash.slice(p2pPrefix.length));
-          const parsed = parseRemoteBundle(code);
-          document.getElementById('txt-remote-sdp').value = JSON.stringify(parsed, null, 2);
-          logEvent('Loaded signaling bundle from URL #p2p= hash fragment.', 'success');
-          showToast('Loaded Peer ID bundle from URL hash!', 'success');
-        } catch (err) {
-          logEvent(`Failed to parse URL #p2p= hash: ${err.message}`, 'warn');
-        }
-      }
-    }
-
-    async function handleOfferById() {
-      const localId = (document.getElementById('input-local-peer-id')?.value || '').trim() || generateShortPeerId();
-      document.getElementById('input-local-peer-id').value = localId;
-      appState.localPeerId = localId;
-      appState.remotePeerId = (document.getElementById('input-remote-peer-id')?.value || '').trim();
-      await handleCreateOffer();
-      publishBundleToRendezvous('offer');
-    }
-
-    async function handleAnswerById() {
-      const remoteId = (document.getElementById('input-remote-peer-id')?.value || '').trim();
-      if (remoteId && !document.getElementById('txt-remote-sdp').value.trim()) {
-        const found = lookupRemoteRecordById(remoteId);
-        if (found && found.bundle) {
-          document.getElementById('txt-remote-sdp').value = JSON.stringify(found.bundle, null, 2);
-          logEvent(`Resolved Offer for Peer ID "${remoteId}" from local rendezvous map.`, 'info');
-        }
-      }
-      await handleAcceptOfferAndCreateAnswer();
-      publishBundleToRendezvous('answer');
-    }
-
-    async function handleApplyAnswerById() {
-      const remoteId = (document.getElementById('input-remote-peer-id')?.value || '').trim();
-      if (remoteId && !document.getElementById('txt-remote-sdp').value.trim()) {
-        const found = lookupRemoteRecordById(remoteId);
-        if (found && found.bundle) {
-          document.getElementById('txt-remote-sdp').value = JSON.stringify(found.bundle, null, 2);
-          logEvent(`Resolved Answer for Peer ID "${remoteId}" from local rendezvous map.`, 'info');
-        }
-      }
-      await handleApplyRemoteAnswer();
-    }
-
-      const type = trimmed.includes('a=setup:active') ? 'answer' : 'offer';
-      return { sdp: { type, sdp: trimmed }, candidates: [] };
-    }
-
-    async function applyRemoteCandidates(pc, bundle) {
-      const sdpLines = bundle.sdp.sdp.split(/\r?\n/);
-      const inlineCandidates = sdpLines
-        .filter(line => line.startsWith('a=candidate:'))
-        .map(line => ({ candidate: line.replace(/^a=/, ''), sdpMid: '0', sdpMLineIndex: 0 }));
-
-      const explicitCandidates = Array.isArray(bundle.candidates) ? bundle.candidates : [];
-      const seen = new Set(appState.remoteCandidates.map(c => c.raw));
-
-      for (const item of [...inlineCandidates, ...explicitCandidates]) {
-        const candStr = typeof item === 'string' ? item : item.candidate;
-        if (!candStr || seen.has(candStr)) continue;
-        seen.add(candStr);
-
-        const parsed = parseIceCandidateString(candStr);
-        if (parsed) {
-          appState.remoteCandidates.push(parsed);
-          logEvent(`Added REMOTE [${parsed.type}] ${parsed.protocol.toUpperCase()} ${parsed.address}:${parsed.port}`, 'ice');
-        }
-
-        const alreadyInSdp = inlineCandidates.some(ic => ic.candidate === candStr);
-        if (!alreadyInSdp) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate({
-              candidate: candStr,
-              sdpMid: item.sdpMid ?? '0',
-              sdpMLineIndex: item.sdpMLineIndex ?? 0
-            }));
-          } catch (err) {
-            logEvent(`Ignored remote candidate: ${err.message}`, 'warn');
-          }
-        }
-      }
-      renderCandidatesTable();
-    }
-
-    async function handleCreateOffer() {
       try {
-        const pc = setupPeerConnection('caller');
-        if (document.getElementById('chk-auto-attach-media').checked) {
-          await attachLocalTracksToPeerConnection(pc);
-        }
-        const offer = await pc.createOffer();
+        await ensureLocalMedia();
+        const pc = createPeerConnection(targetId, true);
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true
+        });
         await pc.setLocalDescription(offer);
-        logEvent('Created local SDP Offer. Gathering ICE candidates...', 'info');
-        updateLocalSdpOutput(false);
-        showToast('Offer created! Copy bundle after ICE gathering.', 'info');
+        logEvent('SIGNAL', `Created SDP offer for Peer ID "${targetId}".`, 'info');
+
+        sendSignalingMessage({
+          type: 'offer',
+          toId: targetId,
+          sdp: pc.localDescription
+        });
+        showToast(`Calling "${targetId}"...`, 'info');
       } catch (err) {
-        logEvent(`Failed to create Offer: ${err.message}`, 'error');
-        showToast(`Error: ${err.message}`, 'error');
+        logEvent('CALL', `Failed to start video chat: ${err.message}`, 'error');
+        showToast(err.message, 'error');
       }
     }
 
-    async function handleAcceptOfferAndCreateAnswer() {
-      try {
-        const bundle = parseRemoteBundle(document.getElementById('txt-remote-sdp').value);
+    async function handleIncomingSignal(msg) {
+      if (!msg || typeof msg !== 'object' || !msg.type) return;
+      if (msg.fromId && msg.fromId === state.myId) return;
+      if (msg.toId && state.myId && msg.toId !== state.myId) return;
 
-        // Support renegotiation offers arriving on an existing connection in have-remote-offer or stable state
-        if (appState.pc && bundle.sdp.type === 'offer' && appState.pc.signalingState === 'stable') {
-          const pc = appState.pc;
-          await pc.setRemoteDescription(new RTCSessionDescription(bundle.sdp));
-          logEvent('Applied renegotiation Remote SDP Offer.', 'success');
-          await applyRemoteCandidates(pc, bundle);
-          if (document.getElementById('chk-auto-attach-media').checked) {
-            await attachLocalTracksToPeerConnection(pc);
-          }
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          logEvent('Created renegotiation Local SDP Answer. Copy bundle back to caller.', 'success');
-          updateLocalSdpOutput(false);
-          showToast('Renegotiation Answer created!', 'success');
-          return;
-        }
+      const senderId = msg.fromId || 'remote-peer';
 
-        if (bundle.sdp.type !== 'offer') {
-          throw new Error(`Expected SDP "offer", got "${bundle.sdp.type}".`);
+      if (msg.type === 'offer') {
+        logEvent('SIGNAL', `Received SDP offer from "${senderId}".`, 'info');
+        const peerInput = document.getElementById('peer-id-input');
+        if (peerInput && !peerInput.value.trim()) {
+          peerInput.value = senderId;
         }
+        state.targetPeerId = senderId;
 
-        const pc = setupPeerConnection('callee');
-        await pc.setRemoteDescription(new RTCSessionDescription(bundle.sdp));
-        logEvent('Applied Remote SDP Offer.', 'success');
-        await applyRemoteCandidates(pc, bundle);
-        if (document.getElementById('chk-auto-attach-media').checked) {
-          await attachLocalTracksToPeerConnection(pc);
-        }
+        await ensureLocalMedia();
+        const pc = createPeerConnection(senderId, false);
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        state.remoteDescriptionSet = true;
+        await flushQueuedRemoteCandidates();
 
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
-        logEvent('Created Local SDP Answer. Copy bundle back to Peer A.', 'success');
-        updateLocalSdpOutput(false);
-        showToast('Answer created! Copy bundle back to Peer A.', 'success');
-      } catch (err) {
-        logEvent(`Accept Offer failed: ${err.message}`, 'error');
-        showToast(err.message, 'error');
-      }
-    }
+        logEvent('SIGNAL', `Created SDP answer for "${senderId}".`, 'success');
 
-    async function handleApplyRemoteAnswer() {
-      try {
-        if (!appState.pc) {
-          const msg = 'No active Offer. Click "Peer A: 1. Create Offer" first.';
-          logEvent(msg, 'warn');
-          showToast(msg, 'warn');
-          return;
-        }
-        if (appState.pc.signalingState !== 'have-local-offer') {
-          const msg = `Cannot apply Answer in signalingState="${appState.pc.signalingState}". Click "Reset / New Session" and create a fresh Offer first.`;
-          logEvent(msg, 'warn');
-          showToast(msg, 'warn');
-          return;
-        }
-
-        const bundle = parseRemoteBundle(document.getElementById('txt-remote-sdp').value);
-        if (bundle.sdp.type !== 'answer') {
-          throw new Error(`Expected SDP "answer", got "${bundle.sdp.type}".`);
-        }
-
-        await appState.pc.setRemoteDescription(new RTCSessionDescription(bundle.sdp));
-        logEvent('Applied Remote SDP Answer. Checking ICE connectivity...', 'success');
-        await applyRemoteCandidates(appState.pc, bundle);
-        showToast('Remote Answer applied!', 'info');
-      } catch (err) {
-        logEvent(`Apply Answer failed: ${err.message}`, 'error');
-        showToast(err.message, 'error');
-      }
-    }
-
-    async function handleAddTrickleCandidates() {
-      try {
-        if (!appState.pc || !appState.pc.remoteDescription) {
-          throw new Error('Set Remote Offer or Answer before merging extra Trickle ICE candidates.');
-        }
-        const bundle = parseRemoteBundle(document.getElementById('txt-remote-sdp').value);
-        await applyRemoteCandidates(appState.pc, bundle);
-        showToast('Merged extra remote ICE candidates.', 'success');
-      } catch (err) {
-        showToast(err.message, 'error');
-      }
-    }
-
-    // =========================================================================
-    // 7. MULTI-MODE PATH MATRIX & LOCAL LOOPBACK TEST (NO-TURN)
-    // =========================================================================
-    function probeIceProfile(profile) {
-      return new Promise((resolve) => {
-        const pc1 = new RTCPeerConnection(profile.config);
-        const pc2 = profile.fullLoopback ? new RTCPeerConnection(profile.config) : null;
-        const gathered = [];
-        let settled = false;
-
-        const finish = (success, plainSummary, summaryHtml) => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(timer);
-          try { pc1.close(); } catch (_) {}
-          try { if (pc2) pc2.close(); } catch (_) {}
-          resolve({ success, plainSummary, summaryHtml });
-        };
-
-        const isStunProfile = profile.id === 'google-stun' || profile.id === 'multi-stun';
-        const timer = setTimeout(() => {
-          const types = [...new Set(gathered.map(c => c.type))];
-          const ok = isStunProfile ? types.includes('srflx') : gathered.length > 0;
-          finish(
-            ok,
-            `Gathered ${gathered.length} candidates (${types.join(', ') || 'none'})`,
-            `Candidates: <span class="text-indigo-300">${gathered.length}</span> [${types.join(', ') || 'none'}]`
-          );
-        }, 3500);
-
-        pc1.onicecandidate = (e) => {
-          if (e.candidate) {
-            const parsed = parseIceCandidateString(e.candidate.candidate);
-            if (parsed) gathered.push(parsed);
-            if (pc2) pc2.addIceCandidate(e.candidate).catch(() => {});
-          } else if (!profile.fullLoopback) {
-            const types = [...new Set(gathered.map(c => c.type))];
-            const ok = isStunProfile ? types.includes('srflx') : gathered.length > 0;
-            finish(
-              ok,
-              `Gathered ${gathered.length} candidates (${types.join(', ') || 'none'})`,
-              `Types: <span class="text-emerald-300">${types.join(', ') || 'none'}</span> (${gathered.length} total)`
-            );
-          }
-        };
-
-        if (pc2) {
-          pc2.onicecandidate = (e) => {
-            if (e.candidate) pc1.addIceCandidate(e.candidate).catch(() => {});
-          };
-          const dc = pc1.createDataChannel('loopback-probe');
-          const t0 = performance.now();
-          dc.onopen = () => {
-            const ms = (performance.now() - t0).toFixed(1);
-            finish(
-              true,
-              `Loopback DataChannel opened in ${ms} ms`,
-              `Loopback DC open in <span class="text-emerald-300">${ms} ms</span>`
-            );
-          };
-        } else {
-          pc1.createDataChannel('gather-probe');
-        }
-
-        pc1.createOffer()
-          .then(offer => pc1.setLocalDescription(offer))
-          .then(() => {
-            if (pc2) {
-              return pc2.setRemoteDescription(pc1.localDescription)
-                .then(() => pc2.createAnswer())
-                .then(ans => pc2.setLocalDescription(ans))
-                .then(() => pc1.setRemoteDescription(pc2.localDescription));
-            }
-          })
-          .catch(err => finish(false, err.message, `<span class="text-rose-400">${escapeHtml(err.message)}</span>`));
-      });
-    }
-
-    async function runAutomatedPathMatrix() {
-      const panel = document.getElementById('matrix-panel');
-      const grid = document.getElementById('matrix-results-grid');
-      panel.classList.remove('hidden');
-      grid.innerHTML = '';
-
-      const profiles = [
-        {
-          id: 'host-lan',
-          title: '1. Host-Only (LAN)',
-          desc: 'Zero STUN/TURN. Local/mDNS host candidates only.',
-          config: { iceServers: [], iceTransportPolicy: 'all' }
-        },
-        {
-          id: 'google-stun',
-          title: '2. Google STUN',
-          desc: 'Discovers public NAT mapping (srflx) via Google STUN.',
-          config: { iceServers: ICE_PRESETS['google-stun'], iceTransportPolicy: 'all' }
-        },
-        {
-          id: 'multi-stun',
-          title: '3. Multi-STUN',
-          desc: 'Queries Google + Cloudflare STUN servers.',
-          config: { iceServers: ICE_PRESETS['multi-stun'], iceTransportPolicy: 'all' }
-        },
-        {
-          id: 'loopback-p2p',
-          title: '4. Local Loopback P2P',
-          desc: 'Connects two local peers & opens a DataChannel.',
-          config: { iceServers: ICE_PRESETS['google-stun'], iceTransportPolicy: 'all' },
-          fullLoopback: true
-        }
-      ];
-
-      logEvent('Running Automated No-TURN Path Matrix & Loopback test...', 'info');
-
-      for (const prof of profiles) {
-        const card = document.createElement('div');
-        card.className = 'bg-slate-950 border border-slate-800 rounded-lg p-3.5 flex flex-col justify-between space-y-2';
-        card.innerHTML = `
-          <div>
-            <div class="flex items-center justify-between gap-2">
-              <span class="text-xs font-bold text-white">${escapeHtml(prof.title)}</span>
-              <span id="mx-status-${prof.id}" class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">TESTING...</span>
-            </div>
-            <p class="text-[11px] text-slate-400 mt-1">${escapeHtml(prof.desc)}</p>
-          </div>
-          <div id="mx-detail-${prof.id}" class="text-[11px] font-mono text-slate-300 pt-2 border-t border-slate-900">Probing...</div>
-        `;
-        grid.appendChild(card);
-
-        const res = await probeIceProfile(prof);
-        const stEl = document.getElementById(`mx-status-${prof.id}`);
-        const detEl = document.getElementById(`mx-detail-${prof.id}`);
-        stEl.textContent = res.success ? 'PASS' : 'CHECK';
-        stEl.className = `text-[10px] font-mono px-2 py-0.5 rounded ${res.success ? 'bg-emerald-500/20 text-emerald-300' : 'bg-rose-500/20 text-rose-300'}`;
-        detEl.innerHTML = res.summaryHtml;
-        logEvent(`Matrix [${prof.title}]: ${res.plainSummary}`, res.success ? 'success' : 'warn');
-      }
-    }
-
-    // =========================================================================
-    // 8. MOBILE VISIBILITY, NETWORK EVENTS, WAKE LOCK & JSON EXPORT
-    // =========================================================================
-    function initVisibilityAndNetworkListeners() {
-      const record = (eventType, detail, level = 'info') => {
-        const entry = {
-          ts: new Date().toISOString(),
-          eventType,
-          detail,
-          iceState: appState.pc ? appState.pc.iceConnectionState : 'idle',
-          dcState: appState.dc ? appState.dc.readyState : 'closed'
-        };
-        appState.visibilityEvents.push(entry);
-        logEvent(`[${eventType}] ${detail} (ICE=${entry.iceState}, DC=${entry.dcState})`, level);
-      };
-
-      document.addEventListener('visibilitychange', () => {
-        const label = document.getElementById('visibility-status-label');
-        if (document.hidden) {
-          label.textContent = 'Visibility: HIDDEN (backgrounded)';
-          label.className = 'font-mono text-amber-400';
-          record('visibilitychange:hidden', 'App switched away / tab hidden — background socket may be throttled', 'warn');
-        } else {
-          label.textContent = 'Visibility: foreground (visible)';
-          label.className = 'font-mono text-emerald-400';
-          record('visibilitychange:visible', 'Tab returned to foreground — probing keepalive & stats', 'success');
-          if (appState.dc && appState.dc.readyState === 'open') {
-            sendKeepaliveHeartbeat();
-          }
-          if (appState.pc) {
-            inspectActiveStats();
-          }
-        }
-      });
-
-      window.addEventListener('blur', () => {
-        record('window:blur', 'Window lost focus', 'info');
-      });
-
-      window.addEventListener('focus', () => {
-        record('window:focus', 'Window regained focus', 'info');
-      });
-
-      window.addEventListener('online', () => {
-        record('network:online', 'Browser reported online', 'success');
-      });
-
-      window.addEventListener('offline', () => {
-        record('network:offline', 'Browser reported offline', 'error');
-      });
-
-      const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
-      if (conn && typeof conn.addEventListener === 'function') {
-        conn.addEventListener('change', () => {
-          record('network:change', `Connection changed (effectiveType=${conn.effectiveType || 'unknown'}, downlink=${conn.downlink ?? '?'}Mbps)`, 'warn');
+        sendSignalingMessage({
+          type: 'answer',
+          toId: senderId,
+          sdp: pc.localDescription
         });
-      }
-    }
-
-    async function toggleScreenWakeLock(enable) {
-      if (!('wakeLock' in navigator)) {
-        showToast('Screen Wake Lock is not supported in this browser.', 'warn');
-        document.getElementById('chk-wakelock').checked = false;
+        showToast(`Incoming call from ${senderId} — answering...`, 'info');
         return;
       }
-      try {
-        if (enable) {
-          appState.wakeLockSentinel = await navigator.wakeLock.request('screen');
-          logEvent('Screen Wake Lock acquired.', 'success');
-          showToast('Screen Wake Lock enabled.', 'success');
-          appState.wakeLockSentinel.addEventListener('release', () => {
-            logEvent('Screen Wake Lock released.', 'warn');
-          });
-        } else if (appState.wakeLockSentinel) {
-          await appState.wakeLockSentinel.release();
-          appState.wakeLockSentinel = null;
-          logEvent('Screen Wake Lock released.', 'info');
+
+      if (msg.type === 'answer') {
+        if (!state.pc) {
+          logEvent('SIGNAL', 'Ignored answer: no active PeerConnection.', 'warn');
+          return;
         }
-      } catch (err) {
-        logEvent(`Wake Lock error: ${err.message}`, 'warn');
-        document.getElementById('chk-wakelock').checked = false;
+        logEvent('SIGNAL', `Received SDP answer from "${senderId}".`, 'success');
+        await state.pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        state.remoteDescriptionSet = true;
+        await flushQueuedRemoteCandidates();
+        return;
+      }
+
+      if (msg.type === 'ice-candidate' && msg.candidate) {
+        if (!state.pc || !state.remoteDescriptionSet) {
+          state.remoteCandidateQueue.push(msg.candidate);
+          return;
+        }
+        try {
+          await state.pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          logEvent('ICE', `Applied remote ICE candidate from "${senderId}".`, 'ice');
+        } catch (err) {
+          logEvent('ICE', `Error adding remote ICE candidate: ${err.message}`, 'warn');
+        }
       }
     }
 
-    function exportDiagnosticReport() {
-      const activeStream = appState.screenStream || appState.localStream;
-      const report = {
-        exportedAt: new Date().toISOString(),
-        mode: 'NO-TURN / DIRECT P2P',
-        userAgent: navigator.userAgent,
-        rtcConfiguration: buildRtcConfiguration(),
-        connectionStates: appState.pc ? {
-          signalingState: appState.pc.signalingState,
-          iceGatheringState: appState.pc.iceGatheringState,
-          iceConnectionState: appState.pc.iceConnectionState,
-          connectionState: appState.pc.connectionState
-        } : 'idle',
-        mediaSummary: {
-          cameraEnabled: appState.cameraEnabled,
-          micEnabled: appState.micEnabled,
-          screenSharing: appState.screenSharing,
-          localVideoTracks: activeStream ? activeStream.getVideoTracks().length : 0,
-          localAudioTracks: appState.localStream ? appState.localStream.getAudioTracks().length : 0,
-          remoteVideoTracks: appState.remoteStream ? appState.remoteStream.getVideoTracks().length : 0,
-          remoteAudioTracks: appState.remoteStream ? appState.remoteStream.getAudioTracks().length : 0
-        },
-        activeSelectedPath: appState.activePairSummary,
-        keepaliveStats: appState.keepaliveStats,
-        visibilityEvents: appState.visibilityEvents,
-        localCandidates: appState.localCandidates,
-        remoteCandidates: appState.remoteCandidates,
-        timelineLogs: appState.logs
-      };
+    function cleanupPeerOnly() {
+      if (state.dc) {
+        try { state.dc.close(); } catch (_) {}
+        state.dc = null;
+      }
+      if (state.pc) {
+        try { state.pc.close(); } catch (_) {}
+        state.pc = null;
+      }
+      if (state.remoteStream) {
+        state.remoteStream.getTracks().forEach(t => {
+          try { t.stop(); } catch (_) {}
+        });
+        state.remoteStream = null;
+      }
+      const remoteVideo = document.getElementById('remote-video');
+      if (remoteVideo) remoteVideo.srcObject = null;
+      state.remoteDescriptionSet = false;
+      state.remoteCandidateQueue = [];
+      state.connectedPeerId = '';
+      updateStateBadges();
+      updateMediaIndicators();
+    }
 
-      const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `webrtc-p2p-diagnostics-${Date.now()}.json`;
-      a.click();
-      URL.revokeObjectURL(url);
-      showToast('Exported diagnostic JSON report.', 'success');
+    function hangupAndReset() {
+      cleanupPeerOnly();
+      if (state.localStream) {
+        state.localStream.getTracks().forEach(t => {
+          try { t.stop(); } catch (_) {}
+        });
+        state.localStream = null;
+      }
+      state.cameraEnabled = true;
+      state.micEnabled = true;
+      state.targetPeerId = '';
+      updateMediaIndicators();
+      updateStateBadges();
+      logEvent('CALL', 'Call ended and session reset.', 'warn');
+      showToast('Call ended and reset.', 'info');
     }
 
     // =========================================================================
-    // 9. INITIALIZATION & EVENT WIRING
+    // EVENT LISTENERS & INITIALIZATION
     // =========================================================================
     window.addEventListener('DOMContentLoaded', () => {
-      renderIceServers();
-      updateKeepaliveUi();
-      updateMediaUiBadges();
-      initIdRendezvous();
-      initVisibilityAndNetworkListeners();
-      logEvent('WebRTC P2P Diagnostics Studio ready (No-TURN Direct P2P + Peer ID Handshake + Video Chat + Auto-Keepalive).', 'info');
-        const preset = ICE_PRESETS[e.target.value];
-        if (preset) {
-          appState.iceServers = JSON.parse(JSON.stringify(preset));
-          renderIceServers();
-          logEvent(`Selected STUN preset: ${e.target.value}`, 'info');
-        }
+      setMyId(generateShortId());
+      initRendezvousChannel();
+      updateStateBadges();
+      updateMediaIndicators();
+      logEvent('APP', 'WebRTC STUN Video Chat initialized (no TURN servers configured).', 'success');
+
+      document.getElementById('btn-copy-my-id')?.addEventListener('click', () => {
+        copyToClipboard(state.myId, 'My ID');
       });
 
-      document.getElementById('btn-add-ice-server').addEventListener('click', () => {
-        appState.iceServers.push({ urls: 'stun:stun.l.google.com:19302' });
-        renderIceServers();
+      document.getElementById('btn-regen-my-id')?.addEventListener('click', () => {
+        setMyId(generateShortId());
+        showToast(`New ID generated: ${state.myId}`, 'info');
       });
 
-      document.getElementById('chk-wakelock').addEventListener('change', (e) => {
-        toggleScreenWakeLock(e.target.checked);
+      document.getElementById('btn-start-call')?.addEventListener('click', startVideoChat);
+      document.getElementById('btn-hangup')?.addEventListener('click', hangupAndReset);
+      document.getElementById('btn-toggle-cam')?.addEventListener('click', toggleCamera);
+      document.getElementById('btn-toggle-mic')?.addEventListener('click', toggleMic);
+
+      document.getElementById('btn-toggle-fallback')?.addEventListener('click', () => {
+        document.getElementById('fallback-drawer')?.classList.toggle('hidden');
       });
 
-      document.getElementById('chk-auto-keepalive').addEventListener('change', (e) => {
-        if (e.target.checked) {
-          logEvent('Auto-Keepalive Heartbeat enabled.', 'info');
-          if (appState.dc && appState.dc.readyState === 'open') startKeepaliveEngine();
-        } else {
-          logEvent('Auto-Keepalive Heartbeat paused.', 'warn');
-          stopKeepaliveEngine();
-        }
+      document.getElementById('btn-copy-signal')?.addEventListener('click', () => {
+        const val = document.getElementById('local-signal-box')?.value || '';
+        copyToClipboard(val, 'Signaling payload');
       });
 
-      document.getElementById('sel-keepalive-interval').addEventListener('change', () => {
-        if (appState.dc && appState.dc.readyState === 'open') {
-          startKeepaliveEngine();
-        }
-      });
-
-      document.getElementById('btn-create-offer').addEventListener('click', handleCreateOffer);
-      document.getElementById('btn-create-answer').addEventListener('click', handleAcceptOfferAndCreateAnswer);
-      document.getElementById('btn-accept-answer').addEventListener('click', handleApplyRemoteAnswer);
-      document.getElementById('btn-add-trickle-ice').addEventListener('click', handleAddTrickleCandidates);
-
-      document.getElementById('btn-gen-peer-id').addEventListener('click', () => {
-        const nextId = generateShortPeerId();
-        document.getElementById('input-local-peer-id').value = nextId;
-        appState.localPeerId = nextId;
-        showToast(`Generated Local Peer ID: ${nextId}`, 'info');
-      });
-
-      document.getElementById('btn-copy-peer-id').addEventListener('click', () => {
-        const idVal = (document.getElementById('input-local-peer-id')?.value || '').trim();
-        copyTextToClipboard(idVal);
-      });
-
-      document.getElementById('btn-id-offer').addEventListener('click', handleOfferById);
-      document.getElementById('btn-id-answer').addEventListener('click', handleAnswerById);
-      document.getElementById('btn-id-apply-answer').addEventListener('click', handleApplyAnswerById);
-
-      document.getElementById('btn-copy-id-code').addEventListener('click', () => {
-        const code = buildCompactIdCode();
-        if (!code) {
-          showToast('Create an Offer or Answer first to generate an ID-Code.', 'warn');
-          return;
-        }
-        copyTextToClipboard(code);
-      });
-
-      document.getElementById('btn-share-hash-link').addEventListener('click', () => {
-        const code = buildCompactIdCode();
-        if (!code) {
-          showToast('Create an Offer or Answer first to build a #hash link.', 'warn');
-          return;
-        }
-        const shareUrl = `${window.location.origin}${window.location.pathname}#p2p=${encodeURIComponent(code)}`;
-        copyTextToClipboard(shareUrl);
-      });
-      }
-
-      const btnPasteRemote = document.getElementById('btn-paste-remote-sdp');
-      if (btnPasteRemote) {
-        btnPasteRemote.addEventListener('click', async () => {
+      document.getElementById('btn-paste-signal')?.addEventListener('click', async () => {
+        const box = document.getElementById('remote-signal-box');
+        if (!box) return;
+        if (navigator.clipboard && navigator.clipboard.readText) {
           try {
-            if (navigator.clipboard && navigator.clipboard.readText) {
-              const text = await navigator.clipboard.readText();
-              if (text) {
-                document.getElementById('txt-remote-sdp').value = text;
-                showToast('Pasted from clipboard.', 'success');
-                return;
-              }
+            const text = await navigator.clipboard.readText();
+            if (text) {
+              box.value = text;
+              showToast('Pasted payload from clipboard.', 'success');
+              return;
             }
-            showToast('Tap the box and paste manually.', 'info');
           } catch (_) {
-            showToast('Tap the box and paste manually.', 'info');
+            // Fall back to focusing textarea
           }
-        });
-      }
-
-      document.getElementById('btn-clear-remote-sdp').addEventListener('click', () => {
-        document.getElementById('txt-remote-sdp').value = '';
+        }
+        box.focus();
+        showToast('Paste payload manually into the box.', 'info');
       });
 
-      document.getElementById('btn-reset-all').addEventListener('click', () => resetSession(true));
-      document.getElementById('btn-export-report').addEventListener('click', exportDiagnosticReport);
-      document.getElementById('btn-clear-logs').addEventListener('click', () => {
-        appState.logs = [];
-        document.getElementById('event-log').innerHTML = '';
+      document.getElementById('btn-apply-signal')?.addEventListener('click', async () => {
+        const raw = (document.getElementById('remote-signal-box')?.value || '').trim();
+        if (!raw) {
+          showToast('Paste a signaling JSON payload first.', 'warn');
+          return;
+        }
+        try {
+          const parsed = JSON.parse(raw);
+          await handleIncomingSignal(parsed);
+          showToast('Applied signaling payload.', 'success');
+        } catch (err) {
+          logEvent('SIGNAL', `Invalid manual payload: ${err.message}`, 'error');
+          showToast('Invalid JSON signaling payload.', 'error');
+        }
       });
 
-      document.getElementById('btn-run-matrix').addEventListener('click', runAutomatedPathMatrix);
-      document.getElementById('btn-close-matrix').addEventListener('click', () => {
-        document.getElementById('matrix-panel').classList.add('hidden');
+      document.getElementById('chat-form')?.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const input = document.getElementById('chat-input');
+        const msg = (input?.value || '').trim();
+        if (!msg) return;
+        if (!state.dc || state.dc.readyState !== 'open') {
+          showToast('DataChannel is not open yet.', 'warn');
+          return;
+        }
+        try {
+          state.dc.send(msg);
+          appendChatBubble(`Me (${state.myId})`, msg, true);
+          logEvent('DATACHANNEL', `Sent message (${msg.length} chars).`, 'info');
+          input.value = '';
+        } catch (err) {
+          logEvent('DATACHANNEL', `Send failed: ${err.message}`, 'error');
+          showToast('Failed to send message.', 'error');
+        }
       });
 
-      const sendChatMessage = () => {
-        const input = document.getElementById('dc-input');
-        const msg = input.value.trim();
-        if (!msg || !appState.dc || appState.dc.readyState !== 'open') return;
-        appState.dc.send(msg);
-        appendDcMessage('You', msg, 'text-indigo-300');
-        input.value = '';
-      };
-
-      document.getElementById('btn-dc-send').addEventListener('click', sendChatMessage);
-      document.getElementById('dc-input').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') sendChatMessage();
-      });
-
-      document.getElementById('btn-dc-ping').addEventListener('click', () => {
-        if (!appState.dc || appState.dc.readyState !== 'open') return;
-        appState.dc.send(`__PING__:${performance.now()}`);
-      });
-
-      document.getElementById('btn-dc-burst').addEventListener('click', () => {
-        if (!appState.dc || appState.dc.readyState !== 'open') return;
-        const payload = '__BURST__:' + 'X'.repeat(65500);
-        appState.dc.send(payload);
-        appendDcMessage('You', `Sent 64KB burst (${payload.length} bytes)`, 'text-purple-300');
+      document.getElementById('btn-clear-log')?.addEventListener('click', () => {
+        const logBox = document.getElementById('event-log');
+        if (logBox) logBox.innerHTML = '';
       });
     });
   </script>
