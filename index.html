@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebRTC STUN Video Chat (MQTT Broker Failover)</title>
+  <title>One-Click WebRTC Video Check (Iran Peer Tool)</title>
   <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
   <style>
     :root {
@@ -14,6 +14,9 @@
       --text: #f8fafc;
       --muted: #94a3b8;
       --accent: #38bdf8;
+      --ok: #22c55e;
+      --bad: #ef4444;
+      --warn: #f59e0b;
     }
     * { box-sizing: border-box; }
     body {
@@ -24,10 +27,10 @@
       padding: 16px;
     }
     .container {
-      max-width: 1140px;
+      max-width: 1080px;
       margin: 0 auto;
       display: grid;
-      gap: 16px;
+      gap: 14px;
     }
     .card {
       background: var(--panel);
@@ -38,26 +41,26 @@
     .row {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 10px;
       align-items: flex-end;
     }
     label {
-      font-size: 0.85rem;
+      font-size: 0.82rem;
       color: var(--muted);
       display: block;
       margin-bottom: 4px;
     }
-    input, select, button {
+    input, button {
       border-radius: 8px;
       border: 1px solid var(--border);
-      font-size: 0.95rem;
+      font-size: 0.94rem;
       padding: 9px 12px;
     }
-    input, select {
+    input {
       background: var(--panel-2);
       color: var(--text);
+      min-width: 150px;
     }
-    input[type="text"] { min-width: 160px; }
     button {
       background: #2563eb;
       color: #fff;
@@ -66,12 +69,43 @@
       font-weight: 600;
     }
     button:hover { filter: brightness(1.08); }
+    button.big-check {
+      background: #16a34a;
+      font-size: 1rem;
+      padding: 11px 18px;
+    }
     button.secondary { background: #334155; }
-    button.success { background: #16a34a; }
     button.danger { background: #dc2626; }
+    .checklist {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .check-item {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 0.9rem;
+    }
+    .badge {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .b-pass { background: rgba(34, 197, 94, 0.18); color: var(--ok); border: 1px solid var(--ok); }
+    .b-fail { background: rgba(239, 68, 68, 0.18); color: var(--bad); border: 1px solid var(--bad); }
+    .b-warn { background: rgba(245, 158, 11, 0.18); color: var(--warn); border: 1px solid var(--warn); }
+    .b-wait { background: rgba(148, 163, 184, 0.15); color: var(--muted); border: 1px solid var(--border); }
     .videos {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
       gap: 12px;
     }
     video {
@@ -80,74 +114,84 @@
       background: #020617;
       border-radius: 8px;
       object-fit: cover;
+      border: 1px solid var(--border);
     }
     .grid-2 {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-      gap: 16px;
+      gap: 14px;
     }
     .chat-messages, .log-box {
-      height: 220px;
+      height: 190px;
       overflow-y: auto;
       background: var(--panel-2);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 10px;
-      font-size: 0.88rem;
+      font-size: 0.85rem;
       line-height: 1.4;
     }
     .log-box {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       white-space: pre-wrap;
     }
     .msg { margin-bottom: 8px; }
-    .msg .meta { color: var(--muted); font-size: 0.76rem; }
-    .status {
-      font-size: 0.85rem;
-      color: var(--accent);
-      margin-top: 10px;
-    }
+    .msg .meta { color: var(--muted); font-size: 0.75rem; }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
-      <h2 style="margin: 0 0 12px;">WebRTC STUN Video Chat (MQTT Broker Failover)</h2>
+      <h2 style="margin: 0 0 10px;">WebRTC Video Check (Press One Button)</h2>
       <div class="row">
         <div>
-          <label for="my-id-input">1. My ID (specify first)</label>
-          <input id="my-id-input" type="text" placeholder="e.g. ALI" maxlength="32" autofocus />
+          <label for="my-id">My ID</label>
+          <input id="my-id" type="text" placeholder="e.g. IRAN1" maxlength="32" />
         </div>
-
         <div>
-          <label for="peer-id-input">2. Peer ID</label>
-          <input id="peer-id-input" type="text" placeholder="e.g. MOHSEN" maxlength="32" />
+          <label for="peer-id">Peer ID (optional for check, needed to call)</label>
+          <input id="peer-id" type="text" placeholder="e.g. SWEDEN1" maxlength="32" />
         </div>
-
-        <div>
-          <label for="broker-select">Active Broker (auto-fails over in order)</label>
-          <select id="broker-select"></select>
-        </div>
-
-        <div class="row">
-          <button id="connect-btn" class="secondary" type="button">Listen on My ID</button>
-          <button id="start-call-btn" class="success" type="button">Start Video Chat</button>
-          <button id="hangup-btn" class="danger" type="button">Hang Up</button>
-        </div>
+        <button id="run-check-btn" class="big-check" type="button">Run Full Video Check</button>
+        <button id="listen-btn" class="secondary" type="button">Listen for Call</button>
+        <button id="call-btn" type="button">Call Peer</button>
+        <button id="copy-report-btn" class="secondary" type="button">Copy Report</button>
+        <button id="hangup-btn" class="danger" type="button">Stop / Hang Up</button>
       </div>
 
-      <div class="status" id="status-line">Status: Type My ID first, then Peer ID and Start Video Chat (STUN-only, no TURN)</div>
+      <div id="checklist" class="checklist">
+        <div class="check-item">
+          <div><strong>1. Camera &amp; Microphone</strong><div id="d-media" style="color:var(--muted);font-size:0.82rem;">Not tested yet</div></div>
+          <span id="s-media" class="badge b-wait">PENDING</span>
+        </div>
+        <div class="check-item">
+          <div><strong>2. Video Codecs (VP8 / H264)</strong><div id="d-codec" style="color:var(--muted);font-size:0.82rem;">Not tested yet</div></div>
+          <span id="s-codec" class="badge b-wait">PENDING</span>
+        </div>
+        <div class="check-item">
+          <div><strong>3. Signaling Broker (Failover)</strong><div id="d-broker" style="color:var(--muted);font-size:0.82rem;">Not tested yet</div></div>
+          <span id="s-broker" class="badge b-wait">PENDING</span>
+        </div>
+        <div class="check-item">
+          <div><strong>4. STUN Public IP Discovery (srflx)</strong><div id="d-stun" style="color:var(--muted);font-size:0.82rem;">Not tested yet</div></div>
+          <span id="s-stun" class="badge b-wait">PENDING</span>
+        </div>
+        <div class="check-item">
+          <div><strong>5. Live Peer Video Stream &amp; Frames</strong><div id="d-video" style="color:var(--muted);font-size:0.82rem;">Start or answer a call to verify remote video frames</div></div>
+          <span id="s-video" class="badge b-wait">WAITING</span>
+        </div>
+      </div>
     </div>
 
     <div class="card">
       <div class="videos">
         <div>
-          <label>Local Video (Me)</label>
+          <label>Local Camera Preview</label>
           <video id="local-video" autoplay playsinline muted></video>
         </div>
         <div>
-          <label>Remote Video (Peer)</label>
+          <label>Remote Peer Video</label>
           <video id="remote-video" autoplay playsinline></video>
         </div>
       </div>
@@ -165,7 +209,7 @@
 
       <div class="card">
         <div class="row" style="justify-content: space-between; margin-bottom: 8px;">
-          <h3 style="margin: 0;">Event Log</h3>
+          <h3 style="margin: 0;">Diagnostic Log</h3>
           <button id="clear-log-btn" class="secondary" type="button" style="padding: 5px 10px; font-size: 0.8rem;">Clear</button>
         </div>
         <div id="log-box" class="log-box"></div>
@@ -174,77 +218,59 @@
   </div>
 
   <script>
-    const SIGNALING_BROKERS = [
-      {
-        name: "TBMQ public demo",
-        url: "wss://demo.tbmq.io/mqtt",
-        username: "demo",
-        password: ""
-      },
-      {
-        name: "ConnectMQ public broker",
-        url: "wss://broker.connectmq.com:8084/mqtt"
-      },
-      {
-        name: "HiveMQ public broker",
-        url: "wss://broker.hivemq.com:8884/mqtt"
-      },
-      {
-        name: "EMQX public broker",
-        url: "wss://broker.emqx.io:8084/mqtt"
-      }
+    const BROKERS = [
+      { name: "TBMQ public demo", url: "wss://demo.tbmq.io/mqtt", username: "demo", password: "" },
+      { name: "ConnectMQ public broker", url: "wss://broker.connectmq.com:8084/mqtt" },
+      { name: "HiveMQ public broker", url: "wss://broker.hivemq.com:8884/mqtt" },
+      { name: "EMQX public broker", url: "wss://broker.emqx.io:8084/mqtt" }
     ];
 
-    const RTC_CONFIG = {
-      iceServers: [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
-        { urls: "stun:stun2.l.google.com:19302" }
-      ]
-    };
+    const STUN_SERVERS = [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun2.l.google.com:19302" }
+    ];
 
-    const TOPIC_PREFIX = "webrtc-stun-failover-v1";
-    const BROKER_CONNECT_TIMEOUT_MS = 6000;
+    const TOPIC_PREFIX = "webrtc-iran-check-v1";
 
-    const myIdInput = document.getElementById("my-id-input");
-    const peerIdInput = document.getElementById("peer-id-input");
-    const brokerSelect = document.getElementById("broker-select");
-    const connectBtn = document.getElementById("connect-btn");
-    const startCallBtn = document.getElementById("start-call-btn");
+    const myIdEl = document.getElementById("my-id");
+    const peerIdEl = document.getElementById("peer-id");
+    const runCheckBtn = document.getElementById("run-check-btn");
+    const listenBtn = document.getElementById("listen-btn");
+    const callBtn = document.getElementById("call-btn");
+    const copyReportBtn = document.getElementById("copy-report-btn");
     const hangupBtn = document.getElementById("hangup-btn");
-    const localVideo = document.getElementById("local-video");
-    const remoteVideo = document.getElementById("remote-video");
-    const chatMessages = document.getElementById("chat-messages");
-    const chatInput = document.getElementById("chat-input");
+    const localVideoEl = document.getElementById("local-video");
+    const remoteVideoEl = document.getElementById("remote-video");
+    const chatMessagesEl = document.getElementById("chat-messages");
+    const chatInputEl = document.getElementById("chat-input");
     const sendChatBtn = document.getElementById("send-chat-btn");
-    const logBox = document.getElementById("log-box");
+    const logBoxEl = document.getElementById("log-box");
     const clearLogBtn = document.getElementById("clear-log-btn");
-    const statusLine = document.getElementById("status-line");
 
-    let currentBrokerIndex = 0;
+    let activeBroker = null;
     let mqttClient = null;
     let boundId = "";
+    let currentPeerId = "";
     let localStream = null;
     let pc = null;
-    let dataChannel = null;
-    let pendingRemoteCandidates = [];
-
-    for (let i = 0; i < SIGNALING_BROKERS.length; i++) {
-      const opt = document.createElement("option");
-      opt.value = String(i);
-      opt.textContent = `${i + 1}. ${SIGNALING_BROKERS[i].name}`;
-      brokerSelect.appendChild(opt);
-    }
+    let dc = null;
+    let pendingCandidates = [];
+    let videoMonitor = null;
 
     function log(msg) {
       const now = new Date();
       const ts = now.toTimeString().split(" ")[0] + "." + String(now.getMilliseconds()).padStart(3, "0");
-      logBox.textContent += `[${ts}] ${msg}\n`;
-      logBox.scrollTop = logBox.scrollHeight;
+      logBoxEl.textContent += `[${ts}] ${msg}\n`;
+      logBoxEl.scrollTop = logBoxEl.scrollHeight;
     }
 
-    function setStatus(text) {
-      statusLine.textContent = `Status: ${text}`;
+    function setCheck(key, state, detail) {
+      const badge = document.getElementById(`s-${key}`);
+      const desc = document.getElementById(`d-${key}`);
+      badge.className = "badge " + (state === "PASS" ? "b-pass" : state === "FAIL" ? "b-fail" : state === "WARN" ? "b-warn" : "b-wait");
+      badge.textContent = state;
+      desc.textContent = detail;
     }
 
     function appendChat(sender, text) {
@@ -257,364 +283,394 @@
       body.textContent = text;
       div.appendChild(meta);
       div.appendChild(body);
-      chatMessages.appendChild(div);
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-
-    function requireMyId() {
-      const id = myIdInput.value.trim();
-      if (!id) throw new Error("Please type 'My ID' first.");
-      return id;
-    }
-
-    function requirePeerId(fallback = "") {
-      const id = peerIdInput.value.trim() || fallback.trim();
-      if (!id) throw new Error("Please enter 'Peer ID'.");
-      return id;
+      chatMessagesEl.appendChild(div);
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
     }
 
     function topicFor(id) {
       return `${TOPIC_PREFIX}/${encodeURIComponent(id)}`;
     }
 
-    function closeExistingMqtt() {
-      if (mqttClient) {
-        try { mqttClient.end(true); } catch (_) {}
-        mqttClient = null;
+    function getMyId() {
+      const id = myIdEl.value.trim();
+      if (id) return id;
+      const generated = "PEER-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+      myIdEl.value = generated;
+      return generated;
+    }
+
+    async function checkCameraAndMic() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        setCheck("media", "FAIL", "getUserMedia unavailable (use HTTPS or localhost).");
+        return false;
+      }
+      try {
+        if (localStream) {
+          for (const t of localStream.getTracks()) t.stop();
+        }
+        localStream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 320 }, height: { ideal: 240 }, frameRate: { ideal: 15, max: 15 } },
+          audio: { echoCancellation: true, noiseSuppression: true }
+        });
+        localVideoEl.srcObject = localStream;
+        const vCount = localStream.getVideoTracks().length;
+        const aCount = localStream.getAudioTracks().length;
+        log(`Media OK: video=${vCount}, audio=${aCount}`);
+        if (vCount === 0) {
+          setCheck("media", "WARN", `Audio ready (${aCount}), but no camera track found.`);
+          return false;
+        }
+        setCheck("media", "PASS", `Camera (${vCount}) & mic (${aCount}) ready at low-bitrate safe settings.`);
+        return true;
+      } catch (err) {
+        log(`Media FAIL: ${err.message}`);
+        setCheck("media", "FAIL", `Camera/mic blocked or failed: ${err.message}`);
+        return false;
       }
     }
 
-    function connectSingleBroker(broker, myId) {
+    function checkCodecs() {
+      try {
+        if (!window.RTCRtpSender || !RTCRtpSender.getCapabilities) {
+          setCheck("codec", "WARN", "Codec capability API unavailable; browser will negotiate defaults.");
+          return;
+        }
+        const caps = RTCRtpSender.getCapabilities("video");
+        const codecs = (caps && caps.codecs || []).map((c) => c.mimeType.replace("video/", ""));
+        const unique = [...new Set(codecs)];
+        const hasVp8 = unique.some((c) => c.toUpperCase() === "VP8");
+        const hasH264 = unique.some((c) => c.toUpperCase() === "H264");
+        const summary = unique.slice(0, 6).join(", ") || "none";
+        log(`Supported video codecs: ${summary}`);
+        if (hasVp8 || hasH264) {
+          setCheck("codec", "PASS", `Supported: ${summary} (VP8=${hasVp8}, H264=${hasH264})`);
+        } else {
+          setCheck("codec", "WARN", `No VP8/H264 listed (${summary}); remote browser may fail codec match.`);
+        }
+      } catch (err) {
+        setCheck("codec", "WARN", `Codec check error: ${err.message}`);
+      }
+    }
+
+    function tryBroker(broker, myId) {
       return new Promise((resolve, reject) => {
-        const clientId = `web-${myId}-${Math.random().toString(36).slice(2, 8)}`;
-        const opts = {
-          clientId,
-          clean: true,
-          reconnectPeriod: 0,
-          connectTimeout: BROKER_CONNECT_TIMEOUT_MS
-        };
+        const clientId = `chk-${myId}-${Math.random().toString(36).slice(2, 7)}`;
+        const opts = { clientId, clean: true, reconnectPeriod: 0, connectTimeout: 5500 };
         if (broker.username) opts.username = broker.username;
         if (typeof broker.password === "string") opts.password = broker.password;
 
         let settled = false;
         const client = mqtt.connect(broker.url, opts);
-
         const timer = setTimeout(() => {
           if (settled) return;
           settled = true;
           try { client.end(true); } catch (_) {}
-          reject(new Error(`Timeout after ${BROKER_CONNECT_TIMEOUT_MS}ms`));
-        }, BROKER_CONNECT_TIMEOUT_MS + 1000);
+          reject(new Error("timeout"));
+        }, 6500);
 
-        const onConnect = () => {
+        client.on("connect", () => {
           if (settled) return;
           settled = true;
           clearTimeout(timer);
-          client.off("error", onError);
-
-          const myTopic = topicFor(myId);
-          client.subscribe(myTopic, { qos: 0 }, (err) => {
+          client.subscribe(topicFor(myId), { qos: 0 }, (err) => {
             if (err) {
               try { client.end(true); } catch (_) {}
-              reject(new Error(`Subscribe failed: ${err.message}`));
+              reject(new Error(err.message));
               return;
             }
-            client.on("message", async (_topic, payload) => {
+            client.on("message", async (_t, payload) => {
               try {
                 const msg = JSON.parse(payload.toString());
                 if (!msg || !msg.from || msg.from === boundId) return;
-                await handleSignalMessage(msg);
-              } catch (parseErr) {
-                log(`Invalid signaling payload: ${parseErr.message}`);
-              }
+                await handleSignal(msg);
+              } catch (_) {}
             });
             resolve(client);
           });
-        };
+        });
 
-        const onError = (err) => {
+        client.on("error", (err) => {
           if (settled) return;
           settled = true;
           clearTimeout(timer);
-          client.off("connect", onConnect);
           try { client.end(true); } catch (_) {}
-          reject(new Error(err && err.message ? err.message : "Connection failed"));
-        };
-
-        client.on("connect", onConnect);
-        client.on("error", onError);
-      });
-    }
-
-    async function ensureMqttWithFailover(startIndex = currentBrokerIndex) {
-      const myId = requireMyId();
-
-      if (mqttClient && mqttClient.connected && boundId === myId && startIndex === currentBrokerIndex) {
-        return mqttClient;
-      }
-
-      closeExistingMqtt();
-      boundId = myId;
-
-      const count = SIGNALING_BROKERS.length;
-      const errors = [];
-
-      for (let offset = 0; offset < count; offset++) {
-        const idx = (startIndex + offset) % count;
-        const broker = SIGNALING_BROKERS[idx];
-        brokerSelect.value = String(idx);
-        log(`Trying broker [${idx + 1}/${count}] ${broker.name} (${broker.url}) as "${myId}"...`);
-        setStatus(`Connecting to ${broker.name}...`);
-
-        try {
-          const client = await connectSingleBroker(broker, myId);
-          currentBrokerIndex = idx;
-          mqttClient = client;
-          log(`Connected to ${broker.name}; listening on "${myId}".`);
-          setStatus(`Ready as "${myId}" via ${broker.name}`);
-          return client;
-        } catch (err) {
-          const reason = `${broker.name}: ${err.message}`;
-          errors.push(reason);
-          log(`Failover from ${broker.name} (${err.message}).`);
-        }
-      }
-
-      throw new Error(`All signaling brokers failed (${errors.join(" | ")})`);
-    }
-
-    async function publishSignalWithFailover(targetId, data) {
-      await ensureMqttWithFailover(currentBrokerIndex);
-      const targetTopic = topicFor(targetId);
-      const envelope = JSON.stringify({
-        ...data,
-        from: boundId,
-        to: targetId
-      });
-
-      return new Promise((resolve, reject) => {
-        if (!mqttClient || !mqttClient.connected) {
-          reject(new Error("MQTT client not connected."));
-          return;
-        }
-        mqttClient.publish(targetTopic, envelope, { qos: 0 }, (err) => {
-          if (err) reject(new Error(`Publish failed: ${err.message}`));
-          else resolve();
+          reject(new Error(err && err.message ? err.message : "error"));
         });
       });
     }
 
-    async function ensureLocalMedia() {
-      if (localStream) return localStream;
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("Camera/mic requires HTTPS or localhost.");
+    async function checkSignalingBrokers() {
+      const myId = getMyId();
+      if (mqttClient && mqttClient.connected && boundId === myId && activeBroker) {
+        setCheck("broker", "PASS", `Connected via ${activeBroker.name} as "${myId}".`);
+        return true;
       }
-      log("Requesting camera and microphone...");
-      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      localVideo.srcObject = localStream;
-      log(`Local media ready (video=${localStream.getVideoTracks().length}, audio=${localStream.getAudioTracks().length}).`);
-      return localStream;
+      if (mqttClient) {
+        try { mqttClient.end(true); } catch (_) {}
+        mqttClient = null;
+      }
+      boundId = myId;
+
+      const tried = [];
+      for (const b of BROKERS) {
+        log(`Testing broker: ${b.name} (${b.url})...`);
+        try {
+          mqttClient = await tryBroker(b, myId);
+          activeBroker = b;
+          log(`Broker OK: ${b.name}`);
+          setCheck("broker", "PASS", `Connected via ${b.name} (tried: ${[...tried, b.name].join(" -> ")})`);
+          return true;
+        } catch (err) {
+          tried.push(`${b.name} [${err.message}]`);
+          log(`Broker failed (${b.name}): ${err.message}`);
+        }
+      }
+      setCheck("broker", "FAIL", `All brokers unreachable: ${tried.join(" | ")}`);
+      return false;
     }
 
-    function bindDataChannel(dc) {
-      dataChannel = dc;
-      dc.onopen = () => {
-        log("DataChannel opened — text chat ready.");
-        setStatus(`Connected to "${peerIdInput.value.trim() || "peer"}" (STUN direct P2P)`);
-      };
+    async function checkStunDiscovery() {
+      return new Promise((resolve) => {
+        const probe = new RTCPeerConnection({ iceServers: STUN_SERVERS });
+        probe.createDataChannel("probe");
+        const types = new Set();
+        let srflxFound = false;
+
+        const finish = () => {
+          try { probe.close(); } catch (_) {}
+          if (srflxFound) {
+            log(`STUN OK: gathered candidate types [${[...types].join(", ")}]`);
+            setCheck("stun", "PASS", `Public STUN address (srflx) discovered. Types: ${[...types].join(", ")}`);
+            resolve(true);
+          } else {
+            log(`STUN WARN: no srflx candidate; types=[${[...types].join(", ")}]`);
+            setCheck("stun", "WARN", `No STUN public (srflx) candidate gathered (types: ${[...types].join(", ") || "none"}). UDP may be throttled/blocked.`);
+            resolve(false);
+          }
+        };
+
+        const timer = setTimeout(finish, 4500);
+        probe.onicecandidate = (ev) => {
+          if (!ev.candidate) {
+            clearTimeout(timer);
+            finish();
+            return;
+          }
+          const t = ev.candidate.type;
+          if (t) types.add(t);
+          if (t === "srflx") srflxFound = true;
+        };
+
+        probe.createOffer()
+          .then((offer) => probe.setLocalDescription(offer))
+          .catch(() => {
+            clearTimeout(timer);
+            finish();
+          });
+      });
+    }
+
+    async function sendSignal(targetId, data) {
+      await checkSignalingBrokers();
+      const body = JSON.stringify({ ...data, from: boundId, to: targetId });
+      await new Promise((resolve, reject) => {
+        mqttClient.publish(topicFor(targetId), body, { qos: 0 }, (err) => err ? reject(err) : resolve());
+      });
+    }
+
+    function bindDataChannel(channel) {
+      dc = channel;
+      dc.onopen = () => log("DataChannel open — text chat ready.");
       dc.onclose = () => log("DataChannel closed.");
-      dc.onerror = (e) => log(`DataChannel error: ${e.message || "unknown"}`);
-      dc.onmessage = (event) => appendChat("Peer", String(event.data));
+      dc.onmessage = (ev) => appendChat("Peer", String(ev.data));
     }
 
-    function createPeerConnection(remotePeerId) {
-      if (pc) pc.close();
-      pendingRemoteCandidates = [];
-      pc = new RTCPeerConnection(RTC_CONFIG);
+    function startVideoStreamMonitor() {
+      if (videoMonitor) clearInterval(videoMonitor);
+      let ticks = 0;
+      videoMonitor = setInterval(async () => {
+        if (!pc) return;
+        ticks++;
+        try {
+          const report = await pc.getStats();
+          let decoded = 0;
+          let dropped = 0;
+          let sent = 0;
+          report.forEach((s) => {
+            if (s.type === "inbound-rtp" && s.kind === "video") {
+              decoded += s.framesDecoded || 0;
+              dropped += s.framesDropped || 0;
+            } else if (s.type === "outbound-rtp" && s.kind === "video") {
+              sent += s.framesSent || 0;
+            }
+          });
+          if (decoded > 0) {
+            setCheck("video", "PASS", `Receiving remote video (${decoded} frames decoded, ${dropped} dropped; sent ${sent} frames).`);
+          } else if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") {
+            setCheck("video", "WARN", `Connected (${pc.iceConnectionState}), but 0 remote video frames decoded yet after ${ticks * 2}s (sent ${sent} frames).`);
+          } else {
+            setCheck("video", "WARN", `ICE state: ${pc.iceConnectionState} (0 remote video frames yet).`);
+          }
+        } catch (_) {}
+      }, 2000);
+    }
+
+    function createPeer(remotePeerId) {
+      if (pc) {
+        try { pc.close(); } catch (_) {}
+      }
+      pendingCandidates = [];
+      currentPeerId = remotePeerId;
+      pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
 
       if (localStream) {
-        for (const track of localStream.getTracks()) {
-          pc.addTrack(track, localStream);
-        }
+        for (const t of localStream.getTracks()) pc.addTrack(t, localStream);
       }
 
-      pc.ontrack = (event) => {
-        log(`Remote ${event.track.kind} track received.`);
-        if (event.streams && event.streams[0]) {
-          remoteVideo.srcObject = event.streams[0];
+      pc.ontrack = (ev) => {
+        log(`Remote ${ev.track.kind} track received.`);
+        if (ev.streams && ev.streams[0]) {
+          remoteVideoEl.srcObject = ev.streams[0];
         } else {
-          if (!remoteVideo.srcObject) remoteVideo.srcObject = new MediaStream();
-          remoteVideo.srcObject.addTrack(event.track);
+          if (!remoteVideoEl.srcObject) remoteVideoEl.srcObject = new MediaStream();
+          remoteVideoEl.srcObject.addTrack(ev.track);
         }
       };
 
-      pc.onicecandidate = async (event) => {
-        if (event.candidate && remotePeerId) {
-          try {
-            await publishSignalWithFailover(remotePeerId, {
-              type: "candidate",
-              candidate: event.candidate.toJSON()
-            });
-          } catch (err) {
-            log(`Candidate send error: ${err.message}`);
-          }
+      pc.onicecandidate = async (ev) => {
+        if (ev.candidate && currentPeerId) {
+          try { await sendSignal(currentPeerId, { type: "candidate", candidate: ev.candidate.toJSON() }); } catch (_) {}
         }
       };
 
-      pc.onicegatheringstatechange = () => log(`ICE gathering state: ${pc.iceGatheringState}`);
-      pc.oniceconnectionstatechange = () => log(`ICE connection state: ${pc.iceConnectionState}`);
-      pc.onconnectionstatechange = () => {
-        log(`Peer connection state: ${pc.connectionState}`);
-        setStatus(`Connection: ${pc.connectionState}`);
-      };
-
+      pc.oniceconnectionstatechange = () => log(`ICE state: ${pc.iceConnectionState}`);
+      pc.onconnectionstatechange = () => log(`Peer state: ${pc.connectionState}`);
+      startVideoStreamMonitor();
       return pc;
     }
 
-    async function flushPendingCandidates() {
+    async function flushPending() {
       if (!pc || !pc.remoteDescription) return;
-      while (pendingRemoteCandidates.length > 0) {
-        const cand = pendingRemoteCandidates.shift();
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(cand));
-        } catch (err) {
-          log(`Candidate error: ${err.message}`);
-        }
+      while (pendingCandidates.length) {
+        const c = pendingCandidates.shift();
+        try { await pc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
       }
     }
 
-    async function handleSignalMessage(msg) {
-      if (!peerIdInput.value.trim() && msg.from) {
-        peerIdInput.value = msg.from;
-      }
-
+    async function handleSignal(msg) {
+      if (!peerIdEl.value.trim() && msg.from) peerIdEl.value = msg.from;
       if (msg.type === "offer") {
-        log(`Incoming call offer from "${msg.from}" via ${SIGNALING_BROKERS[currentBrokerIndex].name}.`);
-        setStatus(`Incoming call from "${msg.from}"...`);
-        await ensureLocalMedia();
-        const conn = createPeerConnection(msg.from);
-        conn.ondatachannel = (event) => bindDataChannel(event.channel);
-
+        log(`Incoming offer from "${msg.from}".`);
+        if (!localStream) await checkCameraAndMic();
+        const conn = createPeer(msg.from);
+        conn.ondatachannel = (ev) => bindDataChannel(ev.channel);
         await conn.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-        await flushPendingCandidates();
-
+        await flushPending();
         const answer = await conn.createAnswer();
         await conn.setLocalDescription(answer);
-        await publishSignalWithFailover(msg.from, {
-          type: "answer",
-          sdp: conn.localDescription.toJSON()
-        });
+        await sendSignal(msg.from, { type: "answer", sdp: conn.localDescription.toJSON() });
         log(`Sent answer to "${msg.from}".`);
       } else if (msg.type === "answer") {
         if (!pc) return;
         log(`Received answer from "${msg.from}".`);
         await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
-        await flushPendingCandidates();
+        await flushPending();
       } else if (msg.type === "candidate" && msg.candidate) {
         if (pc && pc.remoteDescription) {
-          try {
-            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
-          } catch (err) {
-            log(`Candidate error: ${err.message}`);
-          }
+          try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch (_) {}
         } else {
-          pendingRemoteCandidates.push(msg.candidate);
+          pendingCandidates.push(msg.candidate);
         }
       } else if (msg.type === "hangup") {
-        log(`Peer "${msg.from}" hung up.`);
+        log(`Peer "${msg.from}" ended call.`);
         hangUp(false);
       }
     }
 
-    async function startVideoChat() {
-      try {
-        await ensureMqttWithFailover(currentBrokerIndex);
-        const peerId = requirePeerId();
-        await ensureLocalMedia();
+    async function runFullCheck() {
+      log("=== Starting Full Video Check ===");
+      setCheck("media", "WARN", "Checking camera & mic...");
+      setCheck("codec", "WARN", "Checking video codecs...");
+      setCheck("broker", "WARN", "Testing signaling brokers...");
+      setCheck("stun", "WARN", "Testing STUN public IP discovery...");
 
-        const conn = createPeerConnection(peerId);
-        bindDataChannel(conn.createDataChannel("chat"));
-
-        const offer = await conn.createOffer();
-        await conn.setLocalDescription(offer);
-
-        await publishSignalWithFailover(peerId, {
-          type: "offer",
-          sdp: conn.localDescription.toJSON()
-        });
-        log(`Calling "${peerId}" as "${boundId}" via ${SIGNALING_BROKERS[currentBrokerIndex].name}...`);
-        setStatus(`Calling "${peerId}"...`);
-      } catch (err) {
-        log(`Error: ${err.message}`);
-        setStatus(`Error: ${err.message}`);
-      }
+      checkCodecs();
+      await checkCameraAndMic();
+      await checkSignalingBrokers();
+      await checkStunDiscovery();
+      log("=== Full Video Check Complete ===");
     }
 
-    async function hangUp(notifyPeer = true) {
-      const peerId = peerIdInput.value.trim();
-      if (notifyPeer && peerId && mqttClient && mqttClient.connected) {
-        try {
-          await publishSignalWithFailover(peerId, { type: "hangup" });
-        } catch (_) {}
-      }
-      if (dataChannel) { try { dataChannel.close(); } catch (_) {} dataChannel = null; }
-      if (pc) { try { pc.close(); } catch (_) {} pc = null; }
-      if (localStream) {
-        for (const track of localStream.getTracks()) track.stop();
-        localStream = null;
-      }
-      localVideo.srcObject = null;
-      remoteVideo.srcObject = null;
-      pendingRemoteCandidates = [];
-      log("Call ended and local media stopped.");
-      setStatus(boundId ? `Ready as "${boundId}" via ${SIGNALING_BROKERS[currentBrokerIndex].name}` : "Idle");
-    }
-
-    brokerSelect.addEventListener("change", async () => {
-      const nextIdx = Number(brokerSelect.value);
-      if (Number.isNaN(nextIdx)) return;
-      currentBrokerIndex = nextIdx;
-      if (myIdInput.value.trim()) {
-        try {
-          await ensureMqttWithFailover(currentBrokerIndex);
-        } catch (err) {
-          log(`Broker switch error: ${err.message}`);
-        }
-      }
-    });
-
-    connectBtn.addEventListener("click", async () => {
-      try {
-        await ensureMqttWithFailover(currentBrokerIndex);
-      } catch (err) {
-        log(`Error: ${err.message}`);
-        setStatus(`Error: ${err.message}`);
-      }
-    });
-
-    startCallBtn.addEventListener("click", startVideoChat);
-    hangupBtn.addEventListener("click", () => hangUp(true));
-
-    sendChatBtn.addEventListener("click", () => {
-      const text = chatInput.value.trim();
-      if (!text) return;
-      if (!dataChannel || dataChannel.readyState !== "open") {
-        log("DataChannel is not open yet.");
+    async function callPeer() {
+      const target = peerIdEl.value.trim();
+      if (!target) {
+        log("Enter Peer ID first to call.");
         return;
       }
-      dataChannel.send(text);
-      appendChat(`Me (${boundId || myIdInput.value.trim() || "Me"})`, text);
-      chatInput.value = "";
-    });
+      await checkSignalingBrokers();
+      if (!localStream) await checkCameraAndMic();
+      const conn = createPeer(target);
+      bindDataChannel(conn.createDataChannel("chat"));
+      const offer = await conn.createOffer();
+      await conn.setLocalDescription(offer);
+      await sendSignal(target, { type: "offer", sdp: conn.localDescription.toJSON() });
+      log(`Calling "${target}"...`);
+    }
 
-    chatInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        sendChatBtn.click();
+    function hangUp(notify = true) {
+      if (notify && currentPeerId && mqttClient && mqttClient.connected) {
+        sendSignal(currentPeerId, { type: "hangup" }).catch(() => {});
+      }
+      if (videoMonitor) { clearInterval(videoMonitor); videoMonitor = null; }
+      if (dc) { try { dc.close(); } catch (_) {} dc = null; }
+      if (pc) { try { pc.close(); } catch (_) {} pc = null; }
+      if (localStream) {
+        for (const t of localStream.getTracks()) t.stop();
+        localStream = null;
+      }
+      localVideoEl.srcObject = null;
+      remoteVideoEl.srcObject = null;
+      currentPeerId = "";
+      pendingCandidates = [];
+      setCheck("video", "WAITING", "Start or answer a call to verify remote video frames");
+      log("Stopped / hung up.");
+    }
+
+    runCheckBtn.addEventListener("click", runFullCheck);
+    listenBtn.addEventListener("click", () => { checkSignalingBrokers().catch((e) => log(e.message)); });
+    callBtn.addEventListener("click", () => { callPeer().catch((e) => log(e.message)); });
+    hangupBtn.addEventListener("click", () => hangUp(true));
+
+    copyReportBtn.addEventListener("click", async () => {
+      const items = ["media", "codec", "broker", "stun", "video"].map((k) => {
+        const st = document.getElementById(`s-${k}`).textContent;
+        const dt = document.getElementById(`d-${k}`).textContent;
+        return `${k.toUpperCase()} [${st}]: ${dt}`;
+      });
+      const report = `${items.join("\n")}\n\n--- LOG ---\n${logBoxEl.textContent}`;
+      try {
+        await navigator.clipboard.writeText(report);
+        log("Copied check report to clipboard.");
+      } catch (_) {
+        log("Could not copy automatically; select text in Diagnostic Log.");
       }
     });
 
-    clearLogBtn.addEventListener("click", () => { logBox.textContent = ""; });
+    sendChatBtn.addEventListener("click", () => {
+      const txt = chatInputEl.value.trim();
+      if (!txt) return;
+      if (!dc || dc.readyState !== "open") {
+        log("DataChannel not open yet.");
+        return;
+      }
+      dc.send(txt);
+      appendChat("Me", txt);
+      chatInputEl.value = "";
+    });
+    chatInputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); sendChatBtn.click(); }
+    });
+    clearLogBtn.addEventListener("click", () => { logBoxEl.textContent = ""; });
   </script>
 </body>
 </html>
