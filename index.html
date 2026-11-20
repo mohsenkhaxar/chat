@@ -3,7 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebRTC STUN Video Chat (Invite Link)</title>
+  <title>WebRTC STUN Video Chat (MQTT Broker Failover)</title>
+  <script src="https://unpkg.com/mqtt@5.10.1/dist/mqtt.min.js"></script>
   <style>
     :root {
       --bg: #0f172a;
@@ -23,7 +24,7 @@
       padding: 16px;
     }
     .container {
-      max-width: 1120px;
+      max-width: 1140px;
       margin: 0 auto;
       display: grid;
       gap: 16px;
@@ -46,17 +47,17 @@
       display: block;
       margin-bottom: 4px;
     }
-    input, textarea, button {
+    input, select, button {
       border-radius: 8px;
       border: 1px solid var(--border);
       font-size: 0.95rem;
       padding: 9px 12px;
     }
-    input, textarea {
+    input, select {
       background: var(--panel-2);
       color: var(--text);
     }
-    input[type="text"] { min-width: 170px; }
+    input[type="text"] { min-width: 160px; }
     button {
       background: #2563eb;
       color: #fff;
@@ -86,7 +87,7 @@
       gap: 16px;
     }
     .chat-messages, .log-box {
-      height: 200px;
+      height: 220px;
       overflow-y: auto;
       background: var(--panel-2);
       border: 1px solid var(--border);
@@ -107,44 +108,36 @@
       color: var(--accent);
       margin-top: 10px;
     }
-    textarea.link-box {
-      width: 100%;
-      min-height: 72px;
-      font-family: monospace;
-      font-size: 0.78rem;
-      margin-top: 6px;
-    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
-      <h2 style="margin: 0 0 12px;">WebRTC STUN Video Chat (Shareable Link)</h2>
+      <h2 style="margin: 0 0 12px;">WebRTC STUN Video Chat (MQTT Broker Failover)</h2>
       <div class="row">
         <div>
-          <label for="my-id-input">1. My ID</label>
-          <input id="my-id-input" type="text" placeholder="e.g. ALI" maxlength="32" />
+          <label for="my-id-input">1. My ID (specify first)</label>
+          <input id="my-id-input" type="text" placeholder="e.g. ALI" maxlength="32" autofocus />
         </div>
+
         <div>
-          <label for="peer-id-input">2. Peer ID (optional)</label>
+          <label for="peer-id-input">2. Peer ID</label>
           <input id="peer-id-input" type="text" placeholder="e.g. MOHSEN" maxlength="32" />
         </div>
+
+        <div>
+          <label for="broker-select">Active Broker (auto-fails over in order)</label>
+          <select id="broker-select"></select>
+        </div>
+
         <div class="row">
-          <button id="start-call-btn" class="success" type="button">Start &amp; Create Link</button>
+          <button id="connect-btn" class="secondary" type="button">Listen on My ID</button>
+          <button id="start-call-btn" class="success" type="button">Start Video Chat</button>
           <button id="hangup-btn" class="danger" type="button">Hang Up</button>
         </div>
       </div>
 
-      <div class="status" id="status-line">Status: Enter My ID and click "Start &amp; Create Link" (STUN-only, no TURN)</div>
-
-      <div style="margin-top: 12px;">
-        <label for="share-link-box">Shareable Link (Offer Link for Peer, or Return Answer Link back to Caller)</label>
-        <div class="row">
-          <button id="copy-link-btn" class="secondary" type="button">Copy Link</button>
-          <button id="apply-link-btn" class="secondary" type="button">Apply Pasted Link / Code</button>
-        </div>
-        <textarea id="share-link-box" class="link-box" placeholder="Generated link appears here—or paste a link/code from your peer and click 'Apply Pasted Link / Code'..."></textarea>
-      </div>
+      <div class="status" id="status-line">Status: Type My ID first, then Peer ID and Start Video Chat (STUN-only, no TURN)</div>
     </div>
 
     <div class="card">
@@ -181,6 +174,27 @@
   </div>
 
   <script>
+    const SIGNALING_BROKERS = [
+      {
+        name: "TBMQ public demo",
+        url: "wss://demo.tbmq.io/mqtt",
+        username: "demo",
+        password: ""
+      },
+      {
+        name: "ConnectMQ public broker",
+        url: "wss://broker.connectmq.com:8084/mqtt"
+      },
+      {
+        name: "HiveMQ public broker",
+        url: "wss://broker.hivemq.com:8884/mqtt"
+      },
+      {
+        name: "EMQX public broker",
+        url: "wss://broker.emqx.io:8084/mqtt"
+      }
+    ];
+
     const RTC_CONFIG = {
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
@@ -189,13 +203,15 @@
       ]
     };
 
+    const TOPIC_PREFIX = "webrtc-stun-failover-v1";
+    const BROKER_CONNECT_TIMEOUT_MS = 6000;
+
     const myIdInput = document.getElementById("my-id-input");
     const peerIdInput = document.getElementById("peer-id-input");
+    const brokerSelect = document.getElementById("broker-select");
+    const connectBtn = document.getElementById("connect-btn");
     const startCallBtn = document.getElementById("start-call-btn");
     const hangupBtn = document.getElementById("hangup-btn");
-    const copyLinkBtn = document.getElementById("copy-link-btn");
-    const applyLinkBtn = document.getElementById("apply-link-btn");
-    const shareLinkBox = document.getElementById("share-link-box");
     const localVideo = document.getElementById("local-video");
     const remoteVideo = document.getElementById("remote-video");
     const chatMessages = document.getElementById("chat-messages");
@@ -205,11 +221,20 @@
     const clearLogBtn = document.getElementById("clear-log-btn");
     const statusLine = document.getElementById("status-line");
 
+    let currentBrokerIndex = 0;
+    let mqttClient = null;
+    let boundId = "";
     let localStream = null;
     let pc = null;
     let dataChannel = null;
-    let gatheredCandidates = [];
     let pendingRemoteCandidates = [];
+
+    for (let i = 0; i < SIGNALING_BROKERS.length; i++) {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = `${i + 1}. ${SIGNALING_BROKERS[i].name}`;
+      brokerSelect.appendChild(opt);
+    }
 
     function log(msg) {
       const now = new Date();
@@ -236,61 +261,147 @@
       chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 
-    function bytesToBase64Url(bytes) {
-      let bin = "";
-      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    function requireMyId() {
+      const id = myIdInput.value.trim();
+      if (!id) throw new Error("Please type 'My ID' first.");
+      return id;
     }
 
-    function base64UrlToBytes(b64url) {
-      const b64 = b64url.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((b64url.length + 3) % 4);
-      const bin = atob(b64);
-      const out = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-      return out;
+    function requirePeerId(fallback = "") {
+      const id = peerIdInput.value.trim() || fallback.trim();
+      if (!id) throw new Error("Please enter 'Peer ID'.");
+      return id;
     }
 
-    async function encodePayload(obj) {
-      const jsonStr = JSON.stringify(obj);
-      const rawBytes = new TextEncoder().encode(jsonStr);
-      if (typeof CompressionStream !== "undefined") {
-        const cs = new CompressionStream("deflate-raw");
-        const writer = cs.writable.getWriter();
-        writer.write(rawBytes);
-        writer.close();
-        const compBuf = await new Response(cs.readable).arrayBuffer();
-        return "z." + bytesToBase64Url(new Uint8Array(compBuf));
+    function topicFor(id) {
+      return `${TOPIC_PREFIX}/${encodeURIComponent(id)}`;
+    }
+
+    function closeExistingMqtt() {
+      if (mqttClient) {
+        try { mqttClient.end(true); } catch (_) {}
+        mqttClient = null;
       }
-      return "p." + bytesToBase64Url(rawBytes);
     }
 
-    async function decodePayload(token) {
-      if (token.startsWith("z.") && typeof DecompressionStream !== "undefined") {
-        const compBytes = base64UrlToBytes(token.slice(2));
-        const ds = new DecompressionStream("deflate-raw");
-        const writer = ds.writable.getWriter();
-        writer.write(compBytes);
-        writer.close();
-        const rawBuf = await new Response(ds.readable).arrayBuffer();
-        return JSON.parse(new TextDecoder().decode(rawBuf));
+    function connectSingleBroker(broker, myId) {
+      return new Promise((resolve, reject) => {
+        const clientId = `web-${myId}-${Math.random().toString(36).slice(2, 8)}`;
+        const opts = {
+          clientId,
+          clean: true,
+          reconnectPeriod: 0,
+          connectTimeout: BROKER_CONNECT_TIMEOUT_MS
+        };
+        if (broker.username) opts.username = broker.username;
+        if (typeof broker.password === "string") opts.password = broker.password;
+
+        let settled = false;
+        const client = mqtt.connect(broker.url, opts);
+
+        const timer = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          try { client.end(true); } catch (_) {}
+          reject(new Error(`Timeout after ${BROKER_CONNECT_TIMEOUT_MS}ms`));
+        }, BROKER_CONNECT_TIMEOUT_MS + 1000);
+
+        const onConnect = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          client.off("error", onError);
+
+          const myTopic = topicFor(myId);
+          client.subscribe(myTopic, { qos: 0 }, (err) => {
+            if (err) {
+              try { client.end(true); } catch (_) {}
+              reject(new Error(`Subscribe failed: ${err.message}`));
+              return;
+            }
+            client.on("message", async (_topic, payload) => {
+              try {
+                const msg = JSON.parse(payload.toString());
+                if (!msg || !msg.from || msg.from === boundId) return;
+                await handleSignalMessage(msg);
+              } catch (parseErr) {
+                log(`Invalid signaling payload: ${parseErr.message}`);
+              }
+            });
+            resolve(client);
+          });
+        };
+
+        const onError = (err) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          client.off("connect", onConnect);
+          try { client.end(true); } catch (_) {}
+          reject(new Error(err && err.message ? err.message : "Connection failed"));
+        };
+
+        client.on("connect", onConnect);
+        client.on("error", onError);
+      });
+    }
+
+    async function ensureMqttWithFailover(startIndex = currentBrokerIndex) {
+      const myId = requireMyId();
+
+      if (mqttClient && mqttClient.connected && boundId === myId && startIndex === currentBrokerIndex) {
+        return mqttClient;
       }
-      const encoded = token.startsWith("p.") ? token.slice(2) : token;
-      return JSON.parse(new TextDecoder().decode(base64UrlToBytes(encoded)));
+
+      closeExistingMqtt();
+      boundId = myId;
+
+      const count = SIGNALING_BROKERS.length;
+      const errors = [];
+
+      for (let offset = 0; offset < count; offset++) {
+        const idx = (startIndex + offset) % count;
+        const broker = SIGNALING_BROKERS[idx];
+        brokerSelect.value = String(idx);
+        log(`Trying broker [${idx + 1}/${count}] ${broker.name} (${broker.url}) as "${myId}"...`);
+        setStatus(`Connecting to ${broker.name}...`);
+
+        try {
+          const client = await connectSingleBroker(broker, myId);
+          currentBrokerIndex = idx;
+          mqttClient = client;
+          log(`Connected to ${broker.name}; listening on "${myId}".`);
+          setStatus(`Ready as "${myId}" via ${broker.name}`);
+          return client;
+        } catch (err) {
+          const reason = `${broker.name}: ${err.message}`;
+          errors.push(reason);
+          log(`Failover from ${broker.name} (${err.message}).`);
+        }
+      }
+
+      throw new Error(`All signaling brokers failed (${errors.join(" | ")})`);
     }
 
-    function buildShareUrl(kind, token) {
-      const base = `${location.origin}${location.pathname}`;
-      return `${base}#${kind}=${encodeURIComponent(token)}`;
-    }
+    async function publishSignalWithFailover(targetId, data) {
+      await ensureMqttWithFailover(currentBrokerIndex);
+      const targetTopic = topicFor(targetId);
+      const envelope = JSON.stringify({
+        ...data,
+        from: boundId,
+        to: targetId
+      });
 
-    function extractTokenFromInput(raw) {
-      const trimmed = raw.trim();
-      const hashIdx = trimmed.indexOf("#");
-      const hashPart = hashIdx >= 0 ? trimmed.slice(hashIdx + 1) : trimmed;
-      const params = new URLSearchParams(hashPart);
-      if (params.has("offer")) return { kind: "offer", token: params.get("offer") };
-      if (params.has("answer")) return { kind: "answer", token: params.get("answer") };
-      return null;
+      return new Promise((resolve, reject) => {
+        if (!mqttClient || !mqttClient.connected) {
+          reject(new Error("MQTT client not connected."));
+          return;
+        }
+        mqttClient.publish(targetTopic, envelope, { qos: 0 }, (err) => {
+          if (err) reject(new Error(`Publish failed: ${err.message}`));
+          else resolve();
+        });
+      });
     }
 
     async function ensureLocalMedia() {
@@ -309,34 +420,15 @@
       dataChannel = dc;
       dc.onopen = () => {
         log("DataChannel opened — text chat ready.");
-        setStatus("Connected (STUN direct P2P)");
+        setStatus(`Connected to "${peerIdInput.value.trim() || "peer"}" (STUN direct P2P)`);
       };
       dc.onclose = () => log("DataChannel closed.");
       dc.onerror = (e) => log(`DataChannel error: ${e.message || "unknown"}`);
       dc.onmessage = (event) => appendChat("Peer", String(event.data));
     }
 
-    function waitForIceGatheringComplete(peerConn, timeoutMs = 4000) {
-      if (peerConn.iceGatheringState === "complete") return Promise.resolve();
-      return new Promise((resolve) => {
-        const timer = setTimeout(() => {
-          peerConn.removeEventListener("icegatheringstatechange", onChange);
-          resolve();
-        }, timeoutMs);
-        function onChange() {
-          if (peerConn.iceGatheringState === "complete") {
-            clearTimeout(timer);
-            peerConn.removeEventListener("icegatheringstatechange", onChange);
-            resolve();
-          }
-        }
-        peerConn.addEventListener("icegatheringstatechange", onChange);
-      });
-    }
-
-    function createPeerConnection() {
+    function createPeerConnection(remotePeerId) {
       if (pc) pc.close();
-      gatheredCandidates = [];
       pendingRemoteCandidates = [];
       pc = new RTCPeerConnection(RTC_CONFIG);
 
@@ -356,8 +448,17 @@
         }
       };
 
-      pc.onicecandidate = (event) => {
-        if (event.candidate) gatheredCandidates.push(event.candidate.toJSON());
+      pc.onicecandidate = async (event) => {
+        if (event.candidate && remotePeerId) {
+          try {
+            await publishSignalWithFailover(remotePeerId, {
+              type: "candidate",
+              candidate: event.candidate.toJSON()
+            });
+          } catch (err) {
+            log(`Candidate send error: ${err.message}`);
+          }
+        }
       };
 
       pc.onicegatheringstatechange = () => log(`ICE gathering state: ${pc.iceGatheringState}`);
@@ -373,132 +474,126 @@
     async function flushPendingCandidates() {
       if (!pc || !pc.remoteDescription) return;
       while (pendingRemoteCandidates.length > 0) {
-        const c = pendingRemoteCandidates.shift();
+        const cand = pendingRemoteCandidates.shift();
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(c));
+          await pc.addIceCandidate(new RTCIceCandidate(cand));
         } catch (err) {
           log(`Candidate error: ${err.message}`);
         }
       }
     }
 
-    async function startAndCreateLink() {
+    async function handleSignalMessage(msg) {
+      if (!peerIdInput.value.trim() && msg.from) {
+        peerIdInput.value = msg.from;
+      }
+
+      if (msg.type === "offer") {
+        log(`Incoming call offer from "${msg.from}" via ${SIGNALING_BROKERS[currentBrokerIndex].name}.`);
+        setStatus(`Incoming call from "${msg.from}"...`);
+        await ensureLocalMedia();
+        const conn = createPeerConnection(msg.from);
+        conn.ondatachannel = (event) => bindDataChannel(event.channel);
+
+        await conn.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        await flushPendingCandidates();
+
+        const answer = await conn.createAnswer();
+        await conn.setLocalDescription(answer);
+        await publishSignalWithFailover(msg.from, {
+          type: "answer",
+          sdp: conn.localDescription.toJSON()
+        });
+        log(`Sent answer to "${msg.from}".`);
+      } else if (msg.type === "answer") {
+        if (!pc) return;
+        log(`Received answer from "${msg.from}".`);
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.sdp));
+        await flushPendingCandidates();
+      } else if (msg.type === "candidate" && msg.candidate) {
+        if (pc && pc.remoteDescription) {
+          try {
+            await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+          } catch (err) {
+            log(`Candidate error: ${err.message}`);
+          }
+        } else {
+          pendingRemoteCandidates.push(msg.candidate);
+        }
+      } else if (msg.type === "hangup") {
+        log(`Peer "${msg.from}" hung up.`);
+        hangUp(false);
+      }
+    }
+
+    async function startVideoChat() {
       try {
-        const myId = myIdInput.value.trim() || "CALLER";
-        const peerId = peerIdInput.value.trim() || "";
+        await ensureMqttWithFailover(currentBrokerIndex);
+        const peerId = requirePeerId();
         await ensureLocalMedia();
 
-        const conn = createPeerConnection();
+        const conn = createPeerConnection(peerId);
         bindDataChannel(conn.createDataChannel("chat"));
 
         const offer = await conn.createOffer();
         await conn.setLocalDescription(offer);
-        await waitForIceGatheringComplete(conn);
 
-        const token = await encodePayload({
+        await publishSignalWithFailover(peerId, {
           type: "offer",
-          from: myId,
-          to: peerId,
-          sdp: conn.localDescription.toJSON(),
-          candidates: gatheredCandidates
+          sdp: conn.localDescription.toJSON()
         });
-        const link = buildShareUrl("offer", token);
-        shareLinkBox.value = link;
-        log(`Created offer link (${link.length} chars) with ${gatheredCandidates.length} candidates. Share link with peer.`);
-        setStatus("Offer link ready — share with peer");
+        log(`Calling "${peerId}" as "${boundId}" via ${SIGNALING_BROKERS[currentBrokerIndex].name}...`);
+        setStatus(`Calling "${peerId}"...`);
       } catch (err) {
         log(`Error: ${err.message}`);
         setStatus(`Error: ${err.message}`);
       }
     }
 
-    async function processLinkString(rawInput) {
-      const parsedLink = extractTokenFromInput(rawInput);
-      if (!parsedLink) throw new Error("No #offer= or #answer= found in link/input.");
-      const payload = await decodePayload(parsedLink.token);
-      const myId = myIdInput.value.trim() || (parsedLink.kind === "offer" ? "PEER" : "CALLER");
-
-      if (payload.from && !peerIdInput.value.trim()) {
-        peerIdInput.value = payload.from;
+    async function hangUp(notifyPeer = true) {
+      const peerId = peerIdInput.value.trim();
+      if (notifyPeer && peerId && mqttClient && mqttClient.connected) {
+        try {
+          await publishSignalWithFailover(peerId, { type: "hangup" });
+        } catch (_) {}
       }
-
-      if (payload.type === "offer") {
-        log(`Opened offer link from "${payload.from || "peer"}"...`);
-        await ensureLocalMedia();
-        const conn = createPeerConnection();
-        conn.ondatachannel = (event) => bindDataChannel(event.channel);
-
-        await conn.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-        for (const c of (payload.candidates || [])) {
-          await conn.addIceCandidate(new RTCIceCandidate(c));
-        }
-
-        const answer = await conn.createAnswer();
-        await conn.setLocalDescription(answer);
-        await waitForIceGatheringComplete(conn);
-
-        const ansToken = await encodePayload({
-          type: "answer",
-          from: myId,
-          to: payload.from || "",
-          sdp: conn.localDescription.toJSON(),
-          candidates: gatheredCandidates
-        });
-        const returnLink = buildShareUrl("answer", ansToken);
-        shareLinkBox.value = returnLink;
-        log(`Created return answer link (${returnLink.length} chars). Send it back to caller.`);
-        setStatus("Answer link ready — send back to caller");
-      } else if (payload.type === "answer") {
-        if (!pc) throw new Error("No active offer session found to apply this answer.");
-        log(`Applying answer from "${payload.from || "peer"}"...`);
-        await pc.setRemoteDescription(new RTCSessionDescription(payload.sdp));
-        for (const c of (payload.candidates || [])) {
-          await pc.addIceCandidate(new RTCIceCandidate(c));
-        }
-        await flushPendingCandidates();
-        log("Answer applied; establishing STUN P2P connection...");
-        setStatus("Answer applied — connecting...");
-      }
-    }
-
-    function hangUp() {
       if (dataChannel) { try { dataChannel.close(); } catch (_) {} dataChannel = null; }
       if (pc) { try { pc.close(); } catch (_) {} pc = null; }
       if (localStream) {
-        for (const t of localStream.getTracks()) t.stop();
+        for (const track of localStream.getTracks()) track.stop();
         localStream = null;
       }
       localVideo.srcObject = null;
       remoteVideo.srcObject = null;
-      gatheredCandidates = [];
       pendingRemoteCandidates = [];
       log("Call ended and local media stopped.");
-      setStatus("Call ended");
+      setStatus(boundId ? `Ready as "${boundId}" via ${SIGNALING_BROKERS[currentBrokerIndex].name}` : "Idle");
     }
 
-    startCallBtn.addEventListener("click", startAndCreateLink);
-    hangupBtn.addEventListener("click", hangUp);
+    brokerSelect.addEventListener("change", async () => {
+      const nextIdx = Number(brokerSelect.value);
+      if (Number.isNaN(nextIdx)) return;
+      currentBrokerIndex = nextIdx;
+      if (myIdInput.value.trim()) {
+        try {
+          await ensureMqttWithFailover(currentBrokerIndex);
+        } catch (err) {
+          log(`Broker switch error: ${err.message}`);
+        }
+      }
+    });
 
-    applyLinkBtn.addEventListener("click", async () => {
+    connectBtn.addEventListener("click", async () => {
       try {
-        await processLinkString(shareLinkBox.value);
+        await ensureMqttWithFailover(currentBrokerIndex);
       } catch (err) {
-        log(`Link error: ${err.message}`);
+        log(`Error: ${err.message}`);
         setStatus(`Error: ${err.message}`);
       }
     });
 
-    copyLinkBtn.addEventListener("click", async () => {
-      if (!shareLinkBox.value.trim()) return;
-      try {
-        await navigator.clipboard.writeText(shareLinkBox.value);
-        log("Copied link to clipboard.");
-      } catch (_) {
-        shareLinkBox.select();
-        document.execCommand("copy");
-        log("Selected/copied link.");
-      }
-    });
+    startCallBtn.addEventListener("click", startVideoChat);
+    hangupBtn.addEventListener("click", () => hangUp(true));
 
     sendChatBtn.addEventListener("click", () => {
       const text = chatInput.value.trim();
@@ -508,7 +603,7 @@
         return;
       }
       dataChannel.send(text);
-      appendChat(`Me (${myIdInput.value.trim() || "Me"})`, text);
+      appendChat(`Me (${boundId || myIdInput.value.trim() || "Me"})`, text);
       chatInput.value = "";
     });
 
@@ -520,12 +615,6 @@
     });
 
     clearLogBtn.addEventListener("click", () => { logBox.textContent = ""; });
-
-    if (location.hash && (location.hash.includes("offer=") || location.hash.includes("answer="))) {
-      shareLinkBox.value = location.href;
-      log("Detected signaling link in URL hash. Click 'Apply Pasted Link / Code' (or enter My ID first) to proceed.");
-      setStatus("Link detected in URL — ready to apply");
-    }
   </script>
 </body>
 </html>
